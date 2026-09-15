@@ -1,0 +1,11 @@
+{
+  "name": "ombra-roma",
+  "private": true,
+  "description": "Shade map and shade-aware walking routes for central Rome",
+  "scripts": {
+    "test": "node tests/smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}

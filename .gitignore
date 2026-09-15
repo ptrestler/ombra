@@ -1,0 +1,11 @@
+# derived - rebuild with `make`
+build/
+dist/
+
+# The cached OSM and elevation downloads ARE committed, on purpose: a cold fetch
+# takes about an hour against public Overpass mirrors, and a failing mirror
+# returns zero elements rather than an error. See CLAUDE.md.
+
+node_modules/
+__pycache__/
+*.pyc

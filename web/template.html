@@ -1,0 +1,1628 @@
+<title>Ombra Roma</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,600;6..96,700&family=Archivo:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  color-scheme: light;
+  --ground:#f2ece1;      /* travertine */
+  --bldg:#e3dacb;
+  --bldg-line:#d3c7b3;
+  --water:#c6d7e2;
+  --green:#d9ddc2;
+  --ink:#1f1b16;
+  --ink-2:#544c42;
+  --muted:#7d7368;
+  --panel:#fbf7f0;
+  --panel-2:#ede5d8;
+  --line:#ded3c2;
+  --shade:#1b6aa8;
+  --sun:#d9541f;
+  --mid:#a89b8b;
+  --accent:#1b6aa8;
+  --accent-ink:#ffffff;
+  --shadow:0 2px 6px rgba(40,30,18,.08),0 12px 32px rgba(40,30,18,.12);
+  --r:12px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --ground:#131217;
+    --bldg:#232029;
+    --bldg-line:#302c39;
+    --water:#182530;
+    --green:#1b2620;
+    --ink:#f5efe4;
+    --ink-2:#c4bab0;
+    --muted:#968d84;
+    --panel:#1b1a20;
+    --panel-2:#252430;
+    --line:#332f3c;
+    --shade:#3f93d6;
+    --sun:#dd6a26;
+    --mid:#6d655c;
+    --accent:#3f93d6;
+    --accent-ink:#0d1218;
+    --shadow:0 2px 6px rgba(0,0,0,.4),0 14px 40px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#131217;
+  --bldg:#232029;
+  --bldg-line:#302c39;
+  --water:#182530;
+  --green:#1b2620;
+  --ink:#f5efe4;
+  --ink-2:#c4bab0;
+  --muted:#968d84;
+  --panel:#1b1a20;
+  --panel-2:#252430;
+  --line:#332f3c;
+  --shade:#3f93d6;
+  --sun:#dd6a26;
+  --mid:#6d655c;
+  --accent:#3f93d6;
+  --accent-ink:#0d1218;
+  --shadow:0 2px 6px rgba(0,0,0,.4),0 14px 40px rgba(0,0,0,.5);
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font-family:Archivo,"Helvetica Neue",Helvetica,Arial,sans-serif;
+  -webkit-text-size-adjust:100%;overscroll-behavior:none}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+#app{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--ground)}
+#stage{position:relative;flex:1;min-height:0;touch-action:none;cursor:grab}
+#stage.drag{cursor:grabbing}
+#stage>canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+/* ---------- masthead ---------- */
+#top{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:flex-start;
+  justify-content:space-between;gap:10px;padding:10px 12px;pointer-events:none}
+.brand{pointer-events:auto;background:color-mix(in srgb,var(--panel) 88%,transparent);
+  backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:var(--r);
+  padding:8px 12px 9px;box-shadow:var(--shadow)}
+.brand h1{margin:0;font-family:"Bodoni Moda",Georgia,serif;font-weight:600;
+  font-size:22px;line-height:1;letter-spacing:.01em}
+.brand p{margin:3px 0 0;font-size:11px;color:var(--muted);letter-spacing:.04em;
+  text-transform:uppercase;font-weight:500}
+.topbtns{pointer-events:auto;display:flex;gap:6px}
+.iconbtn{width:38px;height:38px;display:grid;place-items:center;border-radius:10px;
+  border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 88%,transparent);
+  backdrop-filter:blur(10px);box-shadow:var(--shadow);font-size:15px;line-height:1}
+.iconbtn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+
+/* ---------- legend ---------- */
+#legend{position:absolute;z-index:5;left:12px;bottom:12px;pointer-events:none;
+  background:color-mix(in srgb,var(--panel) 88%,transparent);backdrop-filter:blur(10px);
+  border:1px solid var(--line);border-radius:10px;padding:7px 10px 8px;box-shadow:var(--shadow)}
+#legend .lb{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);
+  font-weight:600;margin-bottom:5px}
+#legend .bar{width:132px;height:8px;border-radius:4px;
+  background:linear-gradient(90deg,var(--sun),var(--mid) 50%,var(--shade))}
+#legend .ends{display:flex;justify-content:space-between;font-size:10px;color:var(--ink-2);
+  margin-top:4px;font-weight:500}
+
+/* ---------- console ---------- */
+#console{position:relative;z-index:6;background:var(--panel);border-top:1px solid var(--line);
+  padding:10px 12px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -8px 24px rgba(0,0,0,.06)}
+.readrow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+.clock{font-family:"Bodoni Moda",Georgia,serif;font-size:30px;font-weight:600;line-height:1;
+  font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.clock .dim{color:var(--muted);font-size:19px;font-weight:400}
+.sunfacts{text-align:right;font-size:11px;color:var(--muted);line-height:1.45;
+  font-variant-numeric:tabular-nums}
+.sunfacts b{color:var(--ink-2);font-weight:600}
+
+.scrub{position:relative;height:34px;margin:0 0 6px}
+#track{position:absolute;left:0;right:0;top:13px;height:8px;border-radius:4px;
+  background:var(--panel-2);overflow:hidden}
+#daylight{position:absolute;top:0;bottom:0;background:linear-gradient(90deg,
+  color-mix(in srgb,var(--sun) 22%,transparent),color-mix(in srgb,var(--sun) 42%,transparent),
+  color-mix(in srgb,var(--sun) 22%,transparent))}
+#time{position:absolute;inset:0;width:100%;margin:0;-webkit-appearance:none;appearance:none;
+  background:transparent}
+#time::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;
+  background:var(--accent);border:3px solid var(--panel);box-shadow:var(--shadow);margin-top:6px}
+#time::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--accent);
+  border:3px solid var(--panel);box-shadow:var(--shadow)}
+#time::-webkit-slider-runnable-track{height:34px;background:transparent}
+#time::-moz-range-track{height:34px;background:transparent}
+.ticks{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);
+  font-variant-numeric:tabular-nums;margin:-2px 0 9px}
+
+.months{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;margin:0 -12px 9px;
+  padding-left:12px;padding-right:12px;scrollbar-width:none;scroll-padding-left:96px}
+.months::-webkit-scrollbar{display:none}
+.mo{flex:0 0 auto;padding:6px 11px;border-radius:999px;border:1px solid var(--line);
+  background:transparent;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--ink-2)}
+.dayseg{flex:0 0 auto;position:sticky;left:0;z-index:2;display:flex;gap:3px;
+  padding-right:11px;margin-right:2px;background:var(--panel);
+  box-shadow:20px 0 0 -2px var(--panel), 30px 0 12px -8px var(--panel)}
+.dayseg::after{content:"";position:absolute;right:4px;top:5px;bottom:5px;width:1px;background:var(--line)}
+.dy{flex:0 0 auto;padding:6px 9px;border-radius:999px;border:1px solid var(--line);
+  background:transparent;font-size:11.5px;font-weight:600;color:var(--muted)}
+.dy[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.mo[aria-pressed="true"]{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+
+.actions{display:flex;gap:6px;align-items:center}
+.btn{flex:0 0 auto;padding:9px 13px;border-radius:10px;border:1px solid var(--line);
+  background:var(--panel-2);font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+#search{flex:1;min-width:0;padding:9px 11px;border-radius:10px;border:1px solid var(--line);
+  background:var(--panel-2);font-size:12.5px}
+#search::placeholder{color:var(--muted)}
+
+/* ---------- sheet ---------- */
+#sheet{position:absolute;inset:0;z-index:8;background:var(--panel);display:none;
+  flex-direction:column;overflow:hidden}
+#sheet.open{display:flex}
+.sheethead{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+.sheethead h2{margin:0;font-family:"Bodoni Moda",Georgia,serif;font-size:20px;font-weight:600}
+.sheetbody{overflow:auto;padding:12px 16px 24px;-webkit-overflow-scrolling:touch}
+.tabs{display:flex;gap:4px;padding:10px 16px 0}
+.tab{padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;
+  font-size:12px;font-weight:600;color:var(--ink-2)}
+.tab[aria-pressed="true"]{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{text-align:left;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);
+  font-weight:600;padding:0 8px 7px 0;border-bottom:1px solid var(--line)}
+th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
+td{padding:8px 8px 8px 0;border-bottom:1px solid var(--line);vertical-align:middle}
+tr.row{cursor:pointer}
+tr.row:hover td{background:var(--panel-2)}
+.track{display:inline-block;width:30px;height:7px;border-radius:4px;background:var(--panel-2);
+  vertical-align:middle;overflow:hidden;margin-right:6px}
+.track i{display:block;height:100%;border-radius:4px}
+.pct{font-weight:700;font-variant-numeric:tabular-nums}
+.kindtag{font-size:10.5px;color:var(--muted);letter-spacing:.03em}
+
+.prose{font-size:13.5px;line-height:1.62;color:var(--ink-2);max-width:64ch}
+.prose h3{font-family:"Bodoni Moda",Georgia,serif;font-size:16px;color:var(--ink);
+  margin:20px 0 6px;font-weight:600}
+.prose h3:first-child{margin-top:4px}
+.prose ul{padding-left:18px;margin:6px 0}
+.prose li{margin:4px 0}
+.prose b{color:var(--ink)}
+
+/* ---------- street card ---------- */
+#card,#rcard{position:absolute;z-index:7;left:12px;right:12px;bottom:12px;background:var(--panel);
+  border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:12px 14px 13px;
+  display:none}
+#card.open,#rcard.open{display:block}
+#rClose{position:absolute;top:4px;right:5px;z-index:3}
+.rpts{position:relative;display:flex;flex-direction:column;gap:5px;padding-right:34px}
+.rpt{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:9px 10px;
+  border-radius:10px;border:1px solid var(--line);background:var(--panel-2);
+  font-size:13px;font-weight:500;color:var(--ink);min-height:38px}
+.rpt span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rpt.unset span{color:var(--muted);font-weight:400}
+.rpt[aria-expanded="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.pin{flex:0 0 auto;width:19px;height:19px;border-radius:50%;background:var(--ink);color:var(--ground);
+  font-style:normal;font-size:10.5px;font-weight:700;display:grid;place-items:center}
+.pin.b{background:var(--accent);color:var(--accent-ink)}
+.swap{position:absolute;right:0;top:50%;transform:translateY(-50%);width:30px;height:30px;
+  border-radius:8px;border:1px solid var(--line);background:var(--panel-2);
+  font-size:14px;color:var(--ink-2);display:grid;place-items:center}
+#rpick{display:none;margin-top:10px}
+#rcard.picking #rpick{display:block}
+#rcard.picking #rsum{display:none}
+#rSearch{width:100%;padding:9px 11px;border-radius:9px;border:1px solid var(--line);
+  background:var(--panel-2);font-size:13px}
+.pickacts{display:flex;gap:5px;margin-top:7px}
+.pk{flex:1;padding:7px 8px;border-radius:9px;border:1px solid var(--line);background:transparent;
+  font-size:11.5px;font-weight:600;color:var(--ink-2)}
+.pk[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.pk[hidden]{display:none}
+.geonote{margin:7px 0 0;font-size:11px;line-height:1.5;color:var(--muted)}
+#rResults{max-height:190px;overflow:auto;margin-top:8px;-webkit-overflow-scrolling:touch}
+.res{display:flex;align-items:baseline;justify-content:space-between;gap:10px;width:100%;
+  text-align:left;padding:8px 4px;border:none;background:transparent;border-bottom:1px solid var(--line);
+  font-size:13px;color:var(--ink)}
+.res:hover{background:var(--panel-2)}
+.res .cat{flex:0 0 auto;font-size:10px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--muted);font-weight:600}
+.res em{font-style:normal;font-weight:700}
+.resnote{font-size:11.5px;color:var(--muted);padding:10px 4px;line-height:1.5}
+.rmodes{display:flex;gap:5px;margin-top:10px}
+.rm{flex:1;padding:7px 6px;border-radius:9px;border:1px solid var(--line);background:transparent;
+  font-size:11.5px;font-weight:600;color:var(--ink-2)}
+.rm[aria-pressed="true"]{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.rcmp{font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:9px;
+  font-variant-numeric:tabular-nums}
+.rcmp b{color:var(--ink-2);font-weight:600}
+.rcmp .win{color:var(--shade);font-weight:700}
+#rstrip{width:100%;height:56px;display:block;margin-top:9px}
+#rcard.empty .rmodes,#rcard.empty .rcmp,#rcard.empty #rstrip,
+#rcard.empty #rstriplab,#rcard.empty #rBig{display:none}
+.cardtop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-right:20px}
+.cardtop h3{margin:0;font-family:"Bodoni Moda",Georgia,serif;font-size:17px;font-weight:600;
+  line-height:1.2;text-wrap:balance}
+.cardtop .sub{font-size:11px;color:var(--muted);margin-top:2px;letter-spacing:.02em}
+.big{font-family:"Bodoni Moda",Georgia,serif;font-size:31px;font-weight:600;line-height:1;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.big small{font-size:13px;font-weight:400;color:var(--muted)}
+#strip{width:100%;height:62px;display:block;margin-top:9px}
+.striplab{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);
+  font-variant-numeric:tabular-nums;margin-top:1px}
+.close{border:none;background:transparent;color:var(--muted);font-size:19px;line-height:1;padding:4px 6px}
+#cClose{position:absolute;top:4px;right:5px;z-index:3}
+.big{margin-top:6px}
+
+#loading{position:absolute;inset:0;z-index:20;display:grid;place-items:center;background:var(--ground)}
+#loading .l{text-align:center}
+#loading h1{font-family:"Bodoni Moda",Georgia,serif;font-size:30px;margin:0 0 6px;font-weight:600}
+#loading p{margin:0;font-size:12px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
+
+#deskList{display:none}
+@media (min-width:860px){
+  #deskList{display:block;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  #deskList .dlhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  #deskList h2{margin:0;font-family:"Bodoni Moda",Georgia,serif;font-size:15px;font-weight:600}
+  #deskList .tabs{padding:0;gap:4px}
+  #deskList .tab{padding:5px 10px;font-size:11px}
+  #app{flex-direction:row-reverse}
+  #console{width:388px;flex:0 0 388px;border-top:none;border-left:1px solid var(--line);
+    overflow:auto;padding:16px 18px}
+  .clock{font-size:38px}
+  #sheet{left:auto;width:388px;border-left:1px solid var(--line)}
+  #card,#rcard{left:auto;width:360px;right:16px;bottom:16px}
+  #legend{bottom:16px;left:16px}
+  .desk-note{display:block}
+}
+.desk-note{display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);
+  font-size:11.5px;color:var(--muted);line-height:1.55}
+</style>
+
+<div id="app">
+  <div id="stage">
+    <canvas id="base"></canvas>
+    <canvas id="lines"></canvas>
+    <canvas id="over"></canvas>
+
+    <div id="top">
+      <div class="brand">
+        <h1>Ombra Roma</h1>
+        <p>Shade on every street</p>
+      </div>
+      <div class="topbtns">
+        <button class="iconbtn" id="btnRoute" title="Plan a shady walk" aria-label="Plan a shady walk" aria-pressed="false">&#8674;</button>
+        <button class="iconbtn" id="btnList" title="Shadiest streets" aria-label="Shadiest streets">&#9776;</button>
+        <button class="iconbtn" id="btnInfo" title="How this works" aria-label="How this works">?</button>
+      </div>
+    </div>
+
+    <div id="legend">
+      <div class="lb">Shade on the better side</div>
+      <div class="bar"></div>
+      <div class="ends"><span>Full sun</span><span>50%</span><span>Full shade</span></div>
+    </div>
+
+    <div id="card">
+      <div class="cardtop">
+        <div>
+          <h3 id="cName">&#8212;</h3>
+          <div class="sub" id="cSub"></div>
+        </div>
+        <div class="big"><span id="cPct">&#8212;</span><small>%</small></div>
+        <button class="close" id="cClose" aria-label="Close">&#215;</button>
+      </div>
+      <canvas id="strip"></canvas>
+      <div class="striplab"><span>06:00</span><span id="stripNow">&#8212;</span><span>21:30</span></div>
+    </div>
+
+    <div id="rcard">
+      <button class="close" id="rClose" aria-label="Close">&#215;</button>
+      <div class="rpts">
+        <button class="rpt" id="rFrom"><i class="pin">A</i><span id="rFromL">Where are you now?</span></button>
+        <button class="rpt" id="rTo"><i class="pin b">B</i><span id="rToL">Where are you going?</span></button>
+        <button class="swap" id="rSwap" title="Swap" aria-label="Swap start and destination">&#8645;</button>
+      </div>
+
+      <div id="rpick">
+        <input id="rSearch" type="search" placeholder="Search a place or street" aria-label="Search a place or street">
+        <div class="pickacts">
+          <button class="pk" id="pickGeo">Use my location</button>
+          <button class="pk" id="pickMap">Pick on the map</button>
+        </div>
+        <p class="geonote" id="geoNote" hidden></p>
+        <div id="rResults"></div>
+      </div>
+
+      <div id="rsum">
+      <div class="cardtop">
+        <div>
+          <h3 id="rTitle">Plan a shady walk</h3>
+          <div class="sub" id="rSub">Choose both ends of the walk.</div>
+        </div>
+        <div class="big" id="rBig"><span id="rPct">&#8212;</span><small>%</small></div>
+      </div>
+      <div class="rmodes" id="rModes">
+        <button class="rm" data-k="0">Shortest</button>
+        <button class="rm" data-k="1.2" aria-pressed="true">Balanced</button>
+        <button class="rm" data-k="4">Shadiest</button>
+      </div>
+      <div class="rcmp" id="rCompare"></div>
+      <canvas id="rstrip"></canvas>
+      <div class="striplab" id="rstriplab"><span>06:00</span><span id="rstripNow"></span><span>21:30</span></div>
+      </div>
+    </div>
+
+    <div id="sheet">
+      <div class="sheethead">
+        <h2 id="sheetTitle">Shadiest streets</h2>
+        <button class="close" id="sClose" aria-label="Close">&#215;</button>
+      </div>
+      <div class="tabs">
+        <button class="tab" id="tabShade" aria-pressed="true">Shadiest now</button>
+        <button class="tab" id="tabSun" aria-pressed="false">Worst sun</button>
+        <button class="tab" id="tabHow" aria-pressed="false">How it works</button>
+      </div>
+      <div class="sheetbody" id="sheetBody"></div>
+    </div>
+
+    <div id="loading"><div class="l"><h1>Ombra Roma</h1><p id="lmsg">Unpacking shadows&#8230;</p></div></div>
+  </div>
+
+  <div id="console">
+    <div class="readrow">
+      <div class="clock"><span id="clkT">14:00</span> <span class="dim" id="clkD">15 Aug</span></div>
+      <div class="sunfacts">
+        <div>Sun <b id="sunEl">60&#176;</b> up, <b id="sunAz">SSW</b></div>
+        <div><b id="cityShade">&#8212;</b> of the centre shaded</div>
+      </div>
+    </div>
+
+    <div class="scrub">
+      <div id="track"><div id="daylight"></div></div>
+      <input id="time" type="range" min="0" max="31" step="1" value="16" aria-label="Time of day">
+    </div>
+    <div class="ticks"><span>06</span><span>10</span><span>14</span><span>18</span><span>21:30</span></div>
+
+    <div class="months" id="months"><div class="dayseg" id="dayseg">
+      <button class="dy" data-d="1"  aria-pressed="false">1st</button>
+      <button class="dy" data-d="15" aria-pressed="true">15th</button>
+    </div></div>
+
+    <div class="actions">
+      <button class="btn primary" id="btnPlay">&#9654; Play day</button>
+      <input id="search" type="search" placeholder="Find a street&#8230;" aria-label="Find a street">
+    </div>
+
+    <div id="deskList"></div>
+
+    <div class="desk-note">
+      Drag to pan, scroll to zoom, click any street to see its whole day.
+      Shade is ray-traced against OpenStreetMap building footprints, heights and tree canopy;
+      sun angles from the NOAA solar-position algorithm. <b>How it works</b> has the caveats.
+    </div>
+  </div>
+</div>
+
+<script type="text/plain" id="payload">__DATA__</script>
+<script>
+(function(){
+"use strict";
+const $ = s => document.querySelector(s);
+// Surface anything that would otherwise leave the loading screen sitting there forever.
+window.addEventListener("error", e=>{
+  const l=document.getElementById("lmsg"), o=document.getElementById("loading");
+  if(!l||!o||o.style.display==="none") return;
+  l.innerHTML = "Couldn't start.<br><span style='font-size:11px'>"+
+    String((e.error && e.error.message) || e.message || e).replace(/[<>&]/g,"")+"</span>";
+});
+const KINDW = {primary:1,secondary:1,tertiary:1,residential:2,unclassified:2,living_street:2,
+  pedestrian:2,footway:3,steps:3,path:3,service:3,track:3};
+const MONTH = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTHFULL = ["January","February","March","April","May","June","July","August",
+  "September","October","November","December"];
+const LANDMARKS = [
+  ["Colosseo",41.8902,12.4922,1],["Pantheon",41.8986,12.4769,1],["Trevi",41.9009,12.4833,1],
+  ["Piazza Navona",41.8992,12.4731,1],["Piazza di Spagna",41.9058,12.4823,1],
+  ["San Pietro",41.9022,12.4539,1],["Castel Sant'Angelo",41.9031,12.4663,2],
+  ["Piazza Venezia",41.8959,12.4823,1],["Campo de' Fiori",41.8956,12.4722,2],
+  ["Trastevere",41.8894,12.4695,1],["Termini",41.9010,12.5015,1],
+  ["Circo Massimo",41.8860,12.4853,2],["Piazza del Popolo",41.9109,12.4763,1],
+  ["Monti",41.8940,12.4890,2],["Foro Romano",41.8925,12.4853,2],
+  ["Isola Tiberina",41.8909,12.4776,2],["Quirinale",41.8996,12.4870,2],
+  ["Repubblica",41.9028,12.4952,2],["Gianicolo",41.8918,12.4614,2],
+  ["San Giovanni",41.8858,12.5057,1],["S. Maria Maggiore",41.8976,12.4986,2],
+  ["Aventino",41.8842,12.4794,2],["Campidoglio",41.8933,12.4828,2],
+  ["Largo Argentina",41.8955,12.4767,2],["Piazza Farnese",41.8951,12.4712,2],
+  ["Villa Borghese",41.9128,12.4830,2],["Ponte Sisto",41.8927,12.4707,3],
+  ["Porta Pia",41.9098,12.5040,3],["Piazza Barberini",41.9037,12.4886,3]
+];
+
+/* ---------- css var helpers ---------- */
+const CS = getComputedStyle(document.documentElement);
+let C = {};
+function readColors(){
+  const g = n => CS.getPropertyValue(n).trim();
+  C = {ground:g("--ground"),bldg:g("--bldg"),bldgLine:g("--bldg-line"),water:g("--water"),
+       green:g("--green"),ink:g("--ink"),ink2:g("--ink-2"),muted:g("--muted"),
+       shade:g("--shade"),sun:g("--sun"),mid:g("--mid"),panel:g("--panel"),line:g("--line"),
+       accent:g("--accent")};
+  buildRamp();
+}
+function hex2rgb(h){h=h.replace("#","");
+  if(h.length===3)h=h.split("").map(c=>c+c).join("");
+  return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+let RAMP=[];
+function buildRamp(){
+  const a=hex2rgb(C.sun),b=hex2rgb(C.mid),c=hex2rgb(C.shade);
+  RAMP=[];
+  for(let i=0;i<NB;i++){
+    const t=i/(NB-1);
+    let p,q,f;
+    if(t<0.5){p=a;q=b;f=t/0.5;} else {p=b;q=c;f=(t-0.5)/0.5;}
+    // slight gamma so the middle doesn't go muddy
+    const e=f*f*(3-2*f);
+    RAMP.push("rgb("+Math.round(p[0]+(q[0]-p[0])*e)+","+Math.round(p[1]+(q[1]-p[1])*e)+","+
+              Math.round(p[2]+(q[2]-p[2])*e)+")");
+  }
+}
+const NB = 14;                       // colour buckets
+const bucket = v => Math.min(NB-1, Math.max(0, Math.round(v/100*(NB-1))));
+const rampFor = v => RAMP[bucket(v)];
+
+/* ---------- decode ---------- */
+function b64bytes(s){
+  const bin = atob(s); const n = bin.length; const out = new Uint8Array(n);
+  for(let i=0;i<n;i++) out[i]=bin.charCodeAt(i);
+  return out;
+}
+function ozInflate(src){
+  if(src[0]!==0x1f||src[1]!==0x8b||src[2]!==8) throw new Error("not gzip");
+  var flg=src[3], p=10;
+  if(flg&4){ p+=2+(src[p]|src[p+1]<<8); }
+  if(flg&8){ while(src[p]) p++; p++; }
+  if(flg&16){ while(src[p]) p++; p++; }
+  if(flg&2){ p+=2; }
+  var n=src.length;
+  var outLen=(src[n-4]|src[n-3]<<8|src[n-2]<<16|src[n-1]<<24)>>>0;
+  var dst=new Uint8Array(outLen), dp=0;
+  var pos=p, bitbuf=0, bitcnt=0;
+  function getbit(){ if(bitcnt===0){bitbuf=src[pos++];bitcnt=8;} var b=bitbuf&1; bitbuf>>>=1; bitcnt--; return b; }
+  function getbits(c){ var v=0,i=0; for(;i<c;i++) v|=getbit()<<i; return v; }
+  function T(ns){ return {counts:new Uint16Array(16), symbols:new Uint16Array(ns)}; }
+  function build(t,lens,off,num){
+    var i,s=0,offs=new Uint16Array(16);
+    t.counts.fill(0);
+    for(i=0;i<num;i++) t.counts[lens[off+i]]++;
+    t.counts[0]=0;
+    for(i=0;i<16;i++){ offs[i]=s; s+=t.counts[i]; }
+    for(i=0;i<num;i++) if(lens[off+i]) t.symbols[offs[lens[off+i]]++]=i;
+  }
+  function decode(t){
+    var sum=0,cur=0,len=0,c=t.counts;
+    do{ cur=2*cur+getbit(); len++; sum+=c[len]; cur-=c[len]; }while(cur>=0);
+    return t.symbols[sum+cur];
+  }
+  var LB=[3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
+  var LE=[0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
+  var DB=[1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+  var DE=[0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
+  var CL=[16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
+  var flt=T(288), fdt=T(32), dlt=T(288), ddt=T(32), clt=T(19);
+  var fl=new Uint8Array(288),i;
+  for(i=0;i<144;i++) fl[i]=8; for(;i<256;i++) fl[i]=9; for(;i<280;i++) fl[i]=7; for(;i<288;i++) fl[i]=8;
+  build(flt,fl,0,288);
+  var fd=new Uint8Array(32); for(i=0;i<32;i++) fd[i]=5; build(fdt,fd,0,32);
+  var lens=new Uint8Array(320);
+  function dynamic(){
+    var hlit=getbits(5)+257, hdist=getbits(5)+1, hclen=getbits(4)+4, i, num=0, sym, prev, len;
+    lens.fill(0);
+    for(i=0;i<hclen;i++) lens[CL[i]]=getbits(3);
+    build(clt,lens,0,19);
+    lens.fill(0);
+    while(num<hlit+hdist){
+      sym=decode(clt);
+      if(sym<16){ lens[num++]=sym; }
+      else if(sym===16){ prev=lens[num-1]; len=getbits(2)+3; while(len--) lens[num++]=prev; }
+      else if(sym===17){ len=getbits(3)+3; while(len--) lens[num++]=0; }
+      else { len=getbits(7)+11; while(len--) lens[num++]=0; }
+    }
+    build(dlt,lens,0,hlit); build(ddt,lens,hlit,hdist);
+  }
+  function block(lt,dt){
+    var sym,len,dist,i;
+    for(;;){
+      sym=decode(lt);
+      if(sym===256) return;
+      if(sym<256){ dst[dp++]=sym; continue; }
+      sym-=257;
+      len=LB[sym]+getbits(LE[sym]);
+      sym=decode(dt);
+      dist=DB[sym]+getbits(DE[sym]);
+      for(i=0;i<len;i++){ dst[dp]=dst[dp-dist]; dp++; }
+    }
+  }
+  var final;
+  do{
+    final=getbit();
+    var type=getbits(2);
+    if(type===0){
+      bitcnt=0;
+      var L=src[pos]|src[pos+1]<<8; pos+=4;
+      while(L--) dst[dp++]=src[pos++];
+    } else if(type===1){ block(flt,fdt); }
+    else if(type===2){ dynamic(); block(dlt,ddt); }
+    else throw new Error("bad block");
+  }while(!final);
+  return dp===dst.length ? dst : dst.subarray(0,dp);
+}
+/* Decoding is done in-page rather than with DecompressionStream: some embedded web views
+   (iOS Quick Look among them) expose the Streams API but never resolve it, which hangs the
+   page with no error to catch. This costs a second and always finishes. */
+function gunzip(bytes){ return ozInflate(bytes); }
+
+let H, D = {}, S = {};
+function view(buf, sec){
+  const s = H.sections[sec], base = H.hoff + s.o;
+  if(s.t === "u4") return new Uint32Array(buf.slice(base, base + s.n*4));
+  if(s.t === "u2") return new Uint16Array(buf.slice(base, base + s.n*2));
+  return new Uint8Array(buf, base, s.n);
+}
+
+/* ---------- state ---------- */
+const st = {mo:7, day:15, ti:16, scale:1, cx:0, cy:0, sel:-1, hi:null, playing:false, raf:0,
+            routing:false, a:-1, b:-1, k:1.2, route:null, refRoute:null,
+            aL:"", bL:"", pick:null, mapPick:null};
+const dateIdx = () => st.mo*2 + (st.day===15?1:0);
+const dateBase = () => dateIdx()*32;
+const dayLabel = () => (st.day===1?"1":"15");
+
+/* ---------- canvases ---------- */
+const stage=$("#stage"), cvBase=$("#base"), cvLine=$("#lines"), cvOver=$("#over");
+let W=0,Hh=0,DPR=1;
+function resize(){
+  const r = stage.getBoundingClientRect();
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  W = Math.max(1, Math.round(r.width)); Hh = Math.max(1, Math.round(r.height));
+  for(const c of [cvBase,cvLine,cvOver]){ c.width=Math.round(W*DPR); c.height=Math.round(Hh*DPR); }
+  drawAll();
+}
+const sx = x => (x - st.cx)*st.scale + W/2;
+const sy = y => (st.cy - y)*st.scale + Hh/2;
+const ux = px => (px - W/2)/st.scale + st.cx;
+const uy = py => st.cy - (py - Hh/2)/st.scale;
+
+/* ---------- polygon layers ---------- */
+function drawPolys(ctx, cnt, X, Y, fill, stroke, minPx){
+  ctx.beginPath();
+  let p=0, drew=0;
+  for(let i=0;i<cnt.length;i++){
+    const n=cnt[i];
+    let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+    for(let k=0;k<n;k++){const x=X[p+k],y=Y[p+k];
+      if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
+    const ax=sx(x0),bx=sx(x1),by=sy(y0),ay=sy(y1);
+    if(bx< -40||ax>W+40||by< -40||ay>Hh+40||(bx-ax)<minPx&&(by-ay)<minPx){p+=n;continue;}
+    ctx.moveTo(sx(X[p]),sy(Y[p]));
+    for(let k=1;k<n;k++) ctx.lineTo(sx(X[p+k]),sy(Y[p+k]));
+    ctx.closePath(); drew++; p+=n;
+  }
+  if(fill){ctx.fillStyle=fill;ctx.fill("evenodd");}
+  if(stroke&&st.scale>0.12){ctx.strokeStyle=stroke;ctx.lineWidth=Math.min(1,st.scale*1.2);ctx.stroke();}
+  return drew;
+}
+
+function drawBase(){
+  const ctx = cvBase.getContext("2d");
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,W,Hh);
+  ctx.fillStyle = C.ground; ctx.fillRect(0,0,W,Hh);
+  drawPolys(ctx, D.gcnt, D.gX, D.gY, C.green, null, 2);
+  drawPolys(ctx, D.wcnt, D.wX, D.wY, C.water, null, 2);
+  drawPolys(ctx, D.bcnt, D.bX, D.bY, C.bldg, C.bldgLine, 1.6);
+}
+
+function drawLabels(ctx){
+  if(st.scale < 0.055) return;
+  const maxTier = st.scale<0.10 ? 1 : (st.scale<0.20 ? 2 : 3);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  const placed=[];
+  for(const [name,lat,lon,tier] of LANDMARKS){
+    if(tier>maxTier) continue;
+    const x = sx((lon-H.proj.lon0)*H.proj.mperlon), y = sy((lat-H.proj.lat0)*H.proj.mperlat);
+    if(x<40||x>W-40||y<26||y>Hh-26) continue;
+    const size = tier===1?12.5:11;
+    ctx.font = "600 "+size+"px Archivo, sans-serif";
+    const w = ctx.measureText(name).width;
+    let clash=false;
+    for(const r of placed) if(Math.abs(r.x-x)<(r.w+w)/2+10 && Math.abs(r.y-y)<20){clash=true;break;}
+    if(clash) continue;
+    placed.push({x,y,w});
+    ctx.lineWidth=3.5; ctx.strokeStyle=C.ground; ctx.lineJoin="round";
+    ctx.strokeText(name,x,y); ctx.fillStyle=C.ink2; ctx.fillText(name,x,y);
+  }
+}
+
+/* ---------- streets ---------- */
+let SEGOFF=null, SEGN=null;
+function prepSegs(){
+  const cnt=D.scnt; SEGOFF=new Int32Array(cnt.length); SEGN=cnt;
+  let p=0; for(let i=0;i<cnt.length;i++){SEGOFF[i]=p;p+=cnt[i];}
+}
+function frameIndex(){ return dateBase() + st.ti; }
+function shadeOf(seg, fi){ return D.shade[seg*H.nframe + fi]; }
+
+function drawLines(){
+  const ctx = cvLine.getContext("2d");
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,W,Hh);
+  ctx.lineCap="round"; ctx.lineJoin="round";
+  const fi = frameIndex();
+  const s = st.scale;
+  const showMinor = s >= 0.09;
+  const wByClass = [Math.max(1.6, s*7.5), Math.max(1.3, s*5.2), Math.max(0.9, s*3.4)];
+  // bucket \u2192 class \u2192 point list
+  const batches = [];
+  for(let b=0;b<NB;b++) batches.push([[],[],[]]);
+  const X=D.sX, Y=D.sY;
+  for(let i=0;i<H.nseg;i++){
+    const cls = KINDW[H.kinds[D.kind[i]]] || 2;
+    if(cls===3 && !showMinor) continue;
+    const off=SEGOFF[i], n=SEGN[i];
+    let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+    for(let k=0;k<n;k++){const x=X[off+k],y=Y[off+k];
+      if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
+    if(sx(x1)<-8||sx(x0)>W+8||sy(y0)<-8||sy(y1)>Hh+8) continue;
+    batches[bucket(shadeOf(i,fi))][cls-1].push(i);
+  }
+  for(let cls=2;cls>=0;cls--){
+    ctx.lineWidth = wByClass[cls];
+    for(let b=0;b<NB;b++){
+      const list = batches[b][cls];
+      if(!list.length) continue;
+      ctx.strokeStyle = RAMP[b];
+      ctx.beginPath();
+      for(const i of list){
+        const off=SEGOFF[i], n=SEGN[i];
+        ctx.moveTo(sx(X[off]),sy(Y[off]));
+        for(let k=1;k<n;k++) ctx.lineTo(sx(X[off+k]),sy(Y[off+k]));
+      }
+      ctx.stroke();
+    }
+  }
+}
+
+function drawOver(){
+  const ctx = cvOver.getContext("2d");
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,W,Hh);
+  const draw = (list, colour, wid) => {
+    ctx.strokeStyle=colour; ctx.lineWidth=wid; ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.beginPath();
+    for(const i of list){
+      const off=SEGOFF[i], n=SEGN[i];
+      ctx.moveTo(sx(D.sX[off]),sy(D.sY[off]));
+      for(let k=1;k<n;k++) ctx.lineTo(sx(D.sX[off+k]),sy(D.sY[off+k]));
+    }
+    ctx.stroke();
+  };
+  if(st.routing){
+    const fi=frameIndex();
+    if(st.route){
+      const wid=Math.max(4.5, Math.min(15, st.scale*8));
+      const path=(colour,width,which)=>{
+        ctx.strokeStyle=colour; ctx.lineWidth=width; ctx.lineCap="round"; ctx.lineJoin="round";
+        for(const e of st.route.edges){
+          if(which!==undefined && bucket(D.shade[D.eSeg[e]*H.nframe+fi])!==which) continue;
+          const off=SEGOFF[D.eSeg[e]];
+          ctx.beginPath();
+          ctx.moveTo(sx(D.sX[off+D.eI0[e]]), sy(D.sY[off+D.eI0[e]]));
+          for(let k=D.eI0[e]+1;k<=D.eI1[e];k++) ctx.lineTo(sx(D.sX[off+k]), sy(D.sY[off+k]));
+          ctx.stroke();
+        }
+      };
+      path(C.ink, wid+6); path(C.ground, wid+3);
+      for(let b=0;b<NB;b++) path(RAMP[b], wid, b);
+    }
+    for(const [n,lab,fill,ink] of [[st.a,"A",C.ink,C.ground],[st.b,"B",C.accent,C.ground]]){
+      if(n<0) continue;
+      const x=sx(NODEX[n]), y=sy(NODEY[n]);
+      ctx.beginPath(); ctx.arc(x,y,11,0,7);
+      ctx.fillStyle=fill; ctx.fill();
+      ctx.lineWidth=2.5; ctx.strokeStyle=ink; ctx.stroke();
+      ctx.fillStyle=ink; ctx.font="700 12px Archivo, sans-serif";
+      ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(lab,x,y+0.5);
+    }
+  }
+  drawLabels(ctx);
+  if(st.hi && st.hi.length){
+    const wIn = Math.max(4.5, Math.min(14, st.scale*7));
+    draw(st.hi, C.ink, wIn+5);
+    draw(st.hi, C.ground, wIn+2);
+    const fi=frameIndex();
+    for(const i of st.hi){
+      const off=SEGOFF[i];
+      ctx.strokeStyle=rampFor(shadeOf(i,fi));
+      ctx.lineWidth=wIn;
+      ctx.beginPath(); ctx.moveTo(sx(D.sX[off]),sy(D.sY[off]));
+      for(let k=1;k<SEGN[i];k++) ctx.lineTo(sx(D.sX[off+k]),sy(D.sY[off+k]));
+      ctx.stroke();
+    }
+  }
+}
+
+let pending=0;
+// Boot registers the resize and theme listeners before the payload is unpacked,
+// so an early event can land while D is still empty. Nothing to draw until then.
+function drawAll(){ if(!D.bcnt) return; drawBase(); drawLines(); drawOver(); }
+function schedule(full){
+  if(pending) return;
+  pending = requestAnimationFrame(()=>{ pending=0; if(full) drawAll(); else {drawLines();drawOver();} });
+}
+
+/* ---------- sun / readouts ---------- */
+const COMPASS = a => ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"]
+  [Math.round(((a%360)+360)%360/22.5)%16];
+function fmtTime(ti){ const h=6+Math.floor(ti/2), m=(ti%2)?"30":"00";
+  return String(h).padStart(2,"0")+":"+m; }
+
+let cityAvg = null;
+function computeCityAvg(){
+  cityAvg = new Float32Array(H.nframe);
+  const step = Math.max(1, Math.floor(H.nseg/9000));
+  for(let f=0;f<H.nframe;f++){
+    let s=0,c=0;
+    for(let i=0;i<H.nseg;i+=step){ s+=D.shade[i*H.nframe+f]; c++; }
+    cityAvg[f]=s/c;
+  }
+}
+
+function updateReadouts(){
+  const fi = frameIndex(), m = H.frames[fi];
+  $("#clkT").textContent = fmtTime(st.ti);
+  $("#clkD").textContent = dayLabel() + " " + MONTH[st.mo];
+  const up = m.el > 0;
+  $("#sunEl").textContent = up ? Math.round(m.el)+"\u00b0" : "down";
+  $("#sunAz").textContent = up ? COMPASS(m.az) : "\u2014";
+  $("#cityShade").textContent = up ? Math.round(cityAvg[fi])+"%" : "night";
+  $("#time").value = st.ti;
+  document.querySelectorAll(".mo").forEach((b,i)=>b.setAttribute("aria-pressed", i===st.mo));
+  document.querySelectorAll(".dy").forEach(b=>b.setAttribute("aria-pressed", +b.dataset.d===st.day));
+  paintDaylight();
+  if(st.routing && st.a>=0 && st.b>=0){ recompute(); renderRoute(); }
+  if(!st.playing && (!sheetOpen || sheetTab!=="how")) renderList();
+  if($("#card").classList.contains("open")) renderCard();
+}
+
+function paintDaylight(){
+  const base = dateBase();
+  let a=-1,b=-1;
+  for(let t=0;t<32;t++){ if(H.frames[base+t].el>0){ if(a<0)a=t; b=t; } }
+  const el=$("#daylight");
+  if(a<0){ el.style.display="none"; return; }
+  el.style.display="block";
+  el.style.left = (a/31*100)+"%";
+  el.style.width = ((b-a)/31*100)+"%";
+}
+
+/* ---------- lists ---------- */
+let nameIndex = null;   // name -> segment ids
+function buildNameIndex(){
+  nameIndex = new Map();
+  for(let i=0;i<H.nseg;i++){
+    const ni = D.name[i];
+    if(ni===65535) continue;
+    const nm = H.names[ni];
+    let a = nameIndex.get(nm); if(!a){a=[];nameIndex.set(nm,a);} a.push(i);
+  }
+}
+function streetStats(fi){
+  const rows=[];
+  for(const [nm,ids] of nameIndex){
+    if(ids.length<5) continue;
+    let s=0; for(const i of ids) s+=D.shade[i*H.nframe+fi];
+    rows.push({nm, v:s/ids.length, n:ids.length, k:H.kinds[D.kind[ids[0]]]});
+  }
+  return rows;
+}
+const KINDLABEL = {primary:"main road",secondary:"main road",tertiary:"through street",
+  residential:"street",unclassified:"street",living_street:"living street",
+  pedestrian:"pedestrian",footway:"footpath",steps:"steps",path:"path",
+  service:"lane",track:"track"};
+
+let sheetOpen=false, sheetTab="shade";
+function renderList(){
+  const fi=frameIndex();
+  const rows = streetStats(fi);
+  const asc = sheetTab==="sun";
+  rows.sort((a,b)=> (asc ? a.v-b.v : b.v-a.v) || (b.n-a.n));
+  const top = rows.slice(0,60);
+  const night = H.frames[fi].el<=0;
+  let html = "";
+  if(night){
+    html = '<p class="prose">The sun is below the horizon at '+fmtTime(st.ti)+' on '+
+           dayLabel()+' '+MONTHFULL[st.mo]+'. Everything is shade. Move the scrubber into daylight.</p>';
+  } else {
+    html = '<p class="prose" style="margin:2px 0 12px">'+
+      (asc ? 'Most exposed named streets at ' : 'Shadiest named streets at ')+
+      '<b>'+fmtTime(st.ti)+', '+dayLabel()+' '+MONTHFULL[st.mo]+'</b>, walking on the better side.</p>'+
+      '<table><thead><tr><th>Street</th><th class="num">Shade</th></tr></thead><tbody>';
+    for(const r of top){
+      html += '<tr class="row" data-name="'+r.nm.replace(/"/g,"&quot;")+'"><td>'+
+        r.nm+'<br><span class="kindtag">'+(KINDLABEL[r.k]||r.k)+' \u00b7 '+
+        Math.round(r.n*40)+' m</span></td>'+
+        '<td class="num"><span class="track"><i style="width:'+Math.max(6,Math.round(r.v*0.3))+
+        'px;background:'+rampFor(r.v)+'"></i></span> '+
+        '<span class="pct">'+Math.round(r.v)+'%</span></td></tr>';
+    }
+    html += '</tbody></table>';
+  }
+  const targets = [$("#sheetBody")];
+  const dl = $("#deskList");
+  if(dl && getComputedStyle(dl).display !== "none"){
+    dl.innerHTML = '<div class="dlhead"><h2>'+(asc?"Worst sun":"Shadiest streets")+'</h2>'+
+      '<div class="tabs"><button class="tab" data-t="shade" aria-pressed="'+(!asc)+'">Shade</button>'+
+      '<button class="tab" data-t="sun" aria-pressed="'+asc+'">Sun</button></div></div>'+
+      '<div id="dlBody"></div>';
+    dl.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{
+      sheetTab=b.dataset.t; renderList(); }));
+    targets.push($("#dlBody"));
+  }
+  for(const t of targets){
+    if(!t) continue;
+    t.innerHTML = html;
+    t.querySelectorAll("tr.row").forEach(tr=>{
+      tr.addEventListener("click", ()=>{ selectName(tr.dataset.name); closeSheet(); });
+    });
+  }
+}
+
+const HOWTO = `
+<div class="prose">
+<h3>What you're looking at</h3>
+<p>Every street in Rome's historic core, coloured by how much of it is in shade at the
+moment you've scrubbed to \u2014 <b>blue is shaded, orange is open sun</b>. It's computed, not
+guessed: real building footprints, real heights, real sun angles.</p>
+
+<h3>How the shade is worked out</h3>
+<ul>
+<li>Street centrelines are cut into 40-metre pieces and sampled every 8 metres.</li>
+<li>Each sample is tested on <b>both sides</b> of the street, offset to where a pavement
+would be. The result assumes you're walking on the shadier side \u2014 which is what anyone
+sensible does at 38 \u00b0C.</li>
+<li>From each sample a ray is cast toward the sun and checked against a 2-metre height
+grid of every building and tree, sitting on a 10-metre terrain grid. If anything stands
+taller than the ray, that spot is in shade.</li>
+<li><b>Rome's hills shadow each other.</b> The ray carries the observer's own ground
+height, so the Janiculum darkens Trastevere in the early evening and the bridges go
+into shade well before the flat-earth version thought they would. Rays reach up to
+2.5&nbsp;km, because a hill blocks from far further away than a building does.</li>
+<li>Sun position comes from the NOAA solar-position algorithm for Rome's latitude, on the
+<b>1st and 15th of every month</b> \u2014 24 dates, each at half-hour steps. Times are Rome
+civil time, with summer time applied on the real EU dates (29 March to 25 October in 2026).</li>
+<li>Sampling twice a month keeps the sun within about 2\u00b0 of where it actually is on
+any given day. The gap matters most around the equinoxes, when the sun's height changes
+fastest, and least at the solstices.</li>
+</ul>
+
+<h3>Planning a walk</h3>
+<p>Tap the <b>\u21e2</b> button and fill in the two ends of the walk. Each one takes a search
+across <b>872 landmarks</b> \u2014 churches, museums, piazzas, stations, parks, ruins \u2014 and
+every one of the <b>2,088 named streets</b> on the map, so you can type "Pantheon", "Trastevere"
+or "Via dei Coronari" rather than hunting for a pixel. <b>Pick on the map</b> is there for a doorway with
+no name \u2014 it tells you which street it landed on. <b>Use my location</b> reads your GPS, but
+only where the browser will hand it over: the copy of this page hosted on claude.ai runs inside a
+sandboxed frame that blocks location outright, so the button hides itself there. Download the page
+and open it directly and GPS works. The router then searches a walking network
+of <b>__NEDGE__ links</b> across about <b>988 km</b> of streets, lanes, steps and piazza edges,
+scoring every link at the moment you've scrubbed to.</p>
+<ul>
+<li>A link's cost is its length multiplied by <b>1 + k \u00d7 (fraction in sun)</b>.
+<b>Shortest</b> sets k to 0 and ignores the sun entirely. <b>Balanced</b> (k = 1.2) will walk
+about two metres of shade rather than one of sun. <b>Shadiest</b> (k = 4) will go a long way
+round to stay covered.</li>
+<li>The card always shows what the shortest way would have cost you, so you can see the trade
+rather than just take it on faith.</li>
+<li>Times assume 4.5 km/h \u2014 a steady walk, no stops, no waiting to cross.</li>
+</ul>
+
+<h3>Where the data comes from</h3>
+<ul>
+<li><b>__NBLD__ buildings</b> from OpenStreetMap. <b>__NKNOWN__</b> carry a real height or
+floor count; the rest are estimated from the median of their tagged neighbours, which in
+this part of Rome lands around five floors.</li>
+<li><b>4,800 mapped trees</b>, 215 tree rows and the wooded parts of parks, modelled as
+9\u201311 m canopy. Tree mapping is patchy, so some leafy streets score drier than they feel.</li>
+<li><b>Terrain</b> from the AWS Open Data terrain tiles (SRTM-derived, ~30&nbsp;m),
+sampled onto a 10&nbsp;m grid covering the map plus a 2&nbsp;km margin so hills outside
+the frame still cast into it.</li>
+<li>Data \u00a9 OpenStreetMap contributors, ODbL. Elevation data courtesy of the
+USGS/NASA SRTM programme via AWS Open Data.</li>
+</ul>
+
+<h3>What it doesn't know</h3>
+<ul>
+<li><b>The elevation data is a surface model, not bare earth.</b> It has buildings baked
+into it, so in the dense centre it reads roughly 12&nbsp;m high, and it understates the
+height difference between hill and valley by about 8&nbsp;m. Mostly this cancels \u2014 you
+and the building beside you sit on the same slightly-wrong ground \u2014 but it makes the
+hills a little gentler than they really are. Measured against known heights across the
+seven hills and the river, the relief is right to about <b>9.8&nbsp;m</b>, against
+<b>44.9&nbsp;m</b> for the flat-earth model this replaced. I tried three ways of
+recovering bare earth and every one made the relief worse, so the raw data stands.</li>
+<li>No awnings, umbrellas, scaffolding, parked buses, or the tarpaulin someone strung
+across the alley last week. Terrain is sampled at 10&nbsp;m, so a sunken lane or a
+retaining wall below that size is invisible to it.</li>
+<li>Clear sky only. Cloud, humidity and the radiant heat coming off travertine are not
+modelled \u2014 shade at 38 \u00b0C is still 38 \u00b0C, just survivable.</li>
+<li>Arcades and covered passages read as fully shaded, which is right, but a handful of
+narrow lanes get mistaken for them where the mapped centreline clips a building.</li>
+<li><b>Piazzas are walked round, not across.</b> Open squares are modelled as their perimeter,
+so the router will never invent a shortcut that doesn't exist \u2014 but it also won't cut
+straight over Piazza della Rotonda the way you would. Expect distances to run roughly a tenth
+long against a phone map. Hugging the edge is usually the shadier line anyway.</li>
+<li>97% of the network is one connected piece; the rest is courtyards and stubs cut off at the
+edge of the map. Start and end points snap to the connected part, which can be a few dozen
+metres from where you tapped.</li>
+<li>No crossings, traffic lights, steps-versus-ramp or one-way logic \u2014 it routes as the
+crow walks.</li>
+</ul>
+
+<h3>Using it</h3>
+<ul>
+<li>Drag to pan, pinch or scroll to zoom, tap any street for its shade across the whole day.</li>
+<li>The scrubber runs 06:00 to 21:30; the warm band marks daylight for that month.</li>
+<li><b>Play day</b> animates it \u2014 watch the shade rotate out of the east-west streets
+around one in the afternoon.</li>
+</ul>
+</div>`;
+
+function openSheet(tab){
+  sheetOpen=true; sheetTab=tab; $("#sheet").classList.add("open");
+  $("#tabShade").setAttribute("aria-pressed", tab==="shade");
+  $("#tabSun").setAttribute("aria-pressed", tab==="sun");
+  $("#tabHow").setAttribute("aria-pressed", tab==="how");
+  $("#sheetTitle").textContent = tab==="how" ? "How it works" :
+    (tab==="sun" ? "Worst sun" : "Shadiest streets");
+  if(tab==="how") $("#sheetBody").innerHTML = HOWTO
+     .replace("__NEDGE__", H.nedge ? H.nedge.toLocaleString("en") : "54,530")
+     .replace("__NBLD__", H.nbld ? H.nbld.toLocaleString("en") : "14,158")
+     .replace("__NKNOWN__", H.nknown ? H.nknown.toLocaleString("en") : "2,443");
+  else renderList();
+  $("#sheetBody").scrollTop=0;
+}
+function closeSheet(){ sheetOpen=false; $("#sheet").classList.remove("open"); }
+
+/* ---------- street card ---------- */
+function selectName(nm){
+  const ids = nameIndex.get(nm); if(!ids) return;
+  st.sel = {nm, ids};
+  st.hi = ids;
+  // fly to
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  for(const i of ids){ const off=SEGOFF[i];
+    for(let k=0;k<SEGN[i];k++){const x=D.sX[off+k],y=D.sY[off+k];
+      if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;} }
+  st.cx=(x0+x1)/2; st.cy=(y0+y1)/2;
+  const pad=90;
+  st.scale = Math.min(Math.max(0.05, (W-pad)/Math.max(x1-x0,40)),
+                      Math.max(0.05, (Hh-pad)/Math.max(y1-y0,40)));
+  st.scale = Math.min(st.scale, 1.7);
+  $("#card").classList.add("open");
+  renderCard(); schedule(true);
+}
+function selectSeg(i){
+  const ni = D.name[i];
+  if(ni!==65535) return selectName(H.names[ni]);
+  st.sel = {nm:"Unnamed "+(KINDLABEL[H.kinds[D.kind[i]]]||"way"), ids:[i]};
+  st.hi=[i]; $("#card").classList.add("open"); renderCard(); schedule(false);
+}
+function renderCard(){
+  if(!st.sel) return;
+  const {nm, ids} = st.sel, fi=frameIndex();
+  let s=0; for(const i of ids) s+=D.shade[i*H.nframe+fi];
+  const v = s/ids.length;
+  $("#cName").textContent = nm;
+  $("#cSub").textContent = (KINDLABEL[H.kinds[D.kind[ids[0]]]]||"") + " \u00b7 " +
+    Math.round(ids.length*40) + " m \u00b7 " + dayLabel() + " " + MONTH[st.mo];
+  $("#cPct").textContent = Math.round(v);
+  $("#cPct").parentElement.style.color = rampFor(v);
+  drawStrip("#strip", ids.map(i=>[i,1]), 62);
+  $("#stripNow").textContent = fmtTime(st.ti)+" \u00b7 "+Math.round(v)+"% shade";
+}
+function drawStrip(sel, pairs, h){
+  const cv=$(sel), r=cv.getBoundingClientRect();
+  const w=Math.max(200,Math.round(r.width));
+  cv.width=Math.round(w*DPR); cv.height=Math.round(h*DPR);
+  const ctx=cv.getContext("2d"); ctx.setTransform(DPR,0,0,DPR,0,0); ctx.clearRect(0,0,w,h);
+  const base=dateBase(), pad=3;
+  const vals=[]; let wt=0;
+  for(const pr of pairs) wt+=pr[1];
+  wt = wt||1;
+  for(let t=0;t<32;t++){
+    let acc=0;
+    for(const pr of pairs) acc += D.shade[pr[0]*H.nframe+base+t]*pr[1];
+    vals.push(acc/wt);
+  }
+  const X=t=>pad+t/31*(w-2*pad), Y=v=>h-8-(v/100)*(h-16);
+  // night bands, drawn as contiguous runs
+  ctx.fillStyle=C.line; ctx.globalAlpha=.55;
+  let runStart=-1;
+  for(let t=0;t<=32;t++){
+    const dark = t<32 && H.frames[base+t].el<=0;
+    if(dark && runStart<0) runStart=t;
+    if(!dark && runStart>=0){
+      const a=X(runStart)-(w-2*pad)/62, b2=X(t-1)+(w-2*pad)/62;
+      ctx.fillRect(a,0,b2-a,h); runStart=-1;
+    }
+  }
+  ctx.globalAlpha=1;
+  // grid
+  ctx.strokeStyle=C.line; ctx.lineWidth=1;
+  for(const g of [0,50,100]){ ctx.beginPath(); ctx.moveTo(pad,Y(g)); ctx.lineTo(w-pad,Y(g)); ctx.stroke(); }
+  // area
+  const grad=ctx.createLinearGradient(0,Y(100),0,Y(0));
+  grad.addColorStop(0, C.shade); grad.addColorStop(1, C.sun);
+  ctx.beginPath(); ctx.moveTo(X(0),h-8);
+  for(let t=0;t<32;t++) ctx.lineTo(X(t),Y(vals[t]));
+  ctx.lineTo(X(31),h-8); ctx.closePath();
+  ctx.globalAlpha=.16; ctx.fillStyle=grad; ctx.fill(); ctx.globalAlpha=1;
+  ctx.beginPath();
+  for(let t=0;t<32;t++){ const x=X(t),y=Y(vals[t]); t?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+  ctx.strokeStyle=grad; ctx.lineWidth=2; ctx.lineJoin="round"; ctx.stroke();
+  // now marker
+  const nx=X(st.ti), ny=Y(vals[st.ti]);
+  ctx.strokeStyle=C.muted; ctx.lineWidth=1; ctx.setLineDash([2,3]);
+  ctx.beginPath(); ctx.moveTo(nx,4); ctx.lineTo(nx,h-8); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath(); ctx.arc(nx,ny,4.5,0,7); ctx.fillStyle=rampFor(vals[st.ti]);
+  ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=C.panel; ctx.stroke();
+  // worst moment of the day, direct-labelled
+  let lo=0; for(let t=0;t<32;t++) if(H.frames[base+t].el>3 && vals[t]<vals[lo]) lo=t;
+  if(H.frames[base+lo].el>3 && vals[lo] < 96){
+    const lx=X(lo), ly=Y(vals[lo]);
+    ctx.beginPath(); ctx.arc(lx,ly,3,0,7); ctx.fillStyle=C.sun; ctx.fill();
+    ctx.font="600 10px Archivo, sans-serif"; ctx.fillStyle=C.muted;
+    ctx.textAlign = lx > w*0.62 ? "right" : "left";
+    ctx.textBaseline="top";
+    ctx.fillText("worst "+fmtTime(lo)+" \u00b7 "+Math.round(vals[lo])+"%",
+                 lx + (lx>w*0.62?-6:6), Math.min(h-20, ly+5));
+  }
+  ctx.font="500 9px Archivo, sans-serif"; ctx.textAlign="left"; ctx.textBaseline="middle";
+  ctx.lineWidth=3; ctx.strokeStyle=C.panel; ctx.lineJoin="round";
+  for(const [lab,yy] of [["100%",Y(100)+7],["0",Y(0)-7]]){
+    ctx.strokeText(lab,pad+3,yy); ctx.fillStyle=C.muted; ctx.fillText(lab,pad+3,yy);
+  }
+  cv._vals=vals; cv._X=X;
+}
+function bindStrip(sel, out, back){
+  const cv=$(sel);
+  cv.addEventListener("pointermove", e=>{
+    const v=cv._vals; if(!v) return;
+    const r=cv.getBoundingClientRect();
+    const t=Math.round(Math.max(0,Math.min(31,(e.clientX-r.left-3)/(r.width-6)*31)));
+    $(out).textContent = fmtTime(t)+" \u00b7 "+Math.round(v[t])+"% shade";
+  });
+  cv.addEventListener("pointerleave", back);
+}
+bindStrip("#strip","#stripNow",()=>renderCard());
+bindStrip("#rstrip","#rstripNow",()=>renderRoute());
+
+/* ---------- walking graph ---------- */
+let NODEX,NODEY,HEADi,ADJN,ADJE,COMP,BIGC=-1;
+function buildGraph(){
+  const NN=H.nnode, NE=H.nedge, eU=D.eU, eV=D.eV;
+  NODEX=new Float32Array(NN); NODEY=new Float32Array(NN);
+  const seen=new Uint8Array(NN);
+  for(let e=0;e<NE;e++){
+    const off=SEGOFF[D.eSeg[e]], u=eU[e], v=eV[e];
+    if(!seen[u]){seen[u]=1; NODEX[u]=D.sX[off+D.eI0[e]]; NODEY[u]=D.sY[off+D.eI0[e]];}
+    if(!seen[v]){seen[v]=1; NODEX[v]=D.sX[off+D.eI1[e]]; NODEY[v]=D.sY[off+D.eI1[e]];}
+  }
+  HEADi=new Uint32Array(NN+1);
+  for(let e=0;e<NE;e++){ HEADi[eU[e]+1]++; HEADi[eV[e]+1]++; }
+  for(let i=0;i<NN;i++) HEADi[i+1]+=HEADi[i];
+  ADJN=new Uint32Array(2*NE); ADJE=new Uint32Array(2*NE);
+  const cur=HEADi.slice();
+  for(let e=0;e<NE;e++){
+    const u=eU[e], v=eV[e];
+    ADJN[cur[u]]=v; ADJE[cur[u]++]=e;
+    ADJN[cur[v]]=u; ADJE[cur[v]++]=e;
+  }
+  COMP=new Int32Array(NN).fill(-1);
+  const q=new Int32Array(NN); let best=-1,bestN=0,c=0;
+  for(let s0=0;s0<NN;s0++){
+    if(COMP[s0]>=0 || HEADi[s0]===HEADi[s0+1]) continue;
+    let qs=0,qe=0; q[qe++]=s0; COMP[s0]=c; let n=0;
+    while(qs<qe){ const x=q[qs++]; n++;
+      for(let k=HEADi[x];k<HEADi[x+1];k++){ const y=ADJN[k];
+        if(COMP[y]<0){ COMP[y]=c; q[qe++]=y; } } }
+    if(n>bestN){bestN=n;best=c;} c++;
+  }
+  BIGC=best;
+}
+function nearestNode(x,y){
+  let bi=-1, bd=Infinity;
+  for(let i=0;i<H.nnode;i++){
+    if(COMP[i]!==BIGC) continue;
+    const dx=NODEX[i]-x, dy=NODEY[i]-y, d=dx*dx+dy*dy;
+    if(d<bd){bd=d;bi=i;}
+  }
+  return bd < 250*250 ? bi : -1;
+}
+
+/* A*: cost = metres x (1 + k x sun-fraction); h = straight-line metres (admissible, k>=0) */
+let DIST,PREV,PREVE,STATE,HEAP,HPOS;
+function route(src,dst,k,fi){
+  const NN=H.nnode;
+  if(!DIST){ DIST=new Float64Array(NN); PREV=new Int32Array(NN);
+             PREVE=new Int32Array(NN); STATE=new Uint8Array(NN); HEAP=new Int32Array(NN+1); }
+  DIST.fill(Infinity); STATE.fill(0);
+  const F=new Float64Array(NN); F.fill(Infinity);
+  const bx=NODEX[dst], by=NODEY[dst];
+  const hOf=i=>Math.hypot(NODEX[i]-bx, NODEY[i]-by);
+  let hn=0;
+  const push=(i)=>{ let c=++hn; HEAP[c]=i;
+    while(c>1){ const p=c>>1; if(F[HEAP[p]]<=F[HEAP[c]]) break;
+      const t=HEAP[p];HEAP[p]=HEAP[c];HEAP[c]=t; c=p; } };
+  const pop=()=>{ const top=HEAP[1]; HEAP[1]=HEAP[hn--]; let c=1;
+    for(;;){ const l=c<<1, r=l|1; let m=c;
+      if(l<=hn && F[HEAP[l]]<F[HEAP[m]]) m=l;
+      if(r<=hn && F[HEAP[r]]<F[HEAP[m]]) m=r;
+      if(m===c) break; const t=HEAP[m];HEAP[m]=HEAP[c];HEAP[c]=t; c=m; }
+    return top; };
+  DIST[src]=0; F[src]=hOf(src); PREV[src]=-1; PREVE[src]=-1; push(src);
+  const nf=H.nframe;
+  while(hn){
+    const u=pop();
+    if(STATE[u]===2) continue;
+    STATE[u]=2;
+    if(u===dst) break;
+    for(let p=HEADi[u];p<HEADi[u+1];p++){
+      const v=ADJN[p]; if(STATE[v]===2) continue;
+      const e=ADJE[p];
+      const sun = 1 - D.shade[D.eSeg[e]*nf + fi]/100;
+      const w = (D.eLen[e]/10) * (1 + k*sun);
+      const nd = DIST[u] + w;
+      if(nd < DIST[v]){ DIST[v]=nd; PREV[v]=u; PREVE[v]=e; F[v]=nd+hOf(v); push(v); }
+    }
+  }
+  if(DIST[dst]===Infinity) return null;
+  const edges=[]; let x=dst;
+  while(x!==src && PREVE[x]>=0){ edges.push(PREVE[x]); x=PREV[x]; }
+  edges.reverse();
+  return edges;
+}
+function routeStats(edges, fi){
+  let L=0, sh=0;
+  for(const e of edges){
+    const m=D.eLen[e]/10; L+=m;
+    sh += m * D.shade[D.eSeg[e]*H.nframe + fi]/100;
+  }
+  return {len:L, shade: L>0 ? sh/L*100 : 0};
+}
+function recompute(){
+  if(st.a<0 || st.b<0){ st.route=null; st.refRoute=null; return; }
+  const fi=frameIndex();
+  const e1=route(st.a,st.b,st.k,fi);
+  const e0=st.k===0 ? e1 : route(st.a,st.b,0,fi);
+  st.route   = e1 ? {edges:e1, ...routeStats(e1,fi)} : null;
+  st.refRoute= e0 ? {edges:e0, ...routeStats(e0,fi)} : null;
+}
+
+/* ---------- places & destination search ---------- */
+const norm = s0 => s0.replace(/[\u2018\u2019]/g,"'").normalize("NFD")
+  .replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\s+/g," ").trim();
+let PLN=[], STN=[];
+let TOPKEY=new Set();
+function buildSearch(){
+  TOPKEY = new Set(H.top.map(t=>t[1]+"|"+t[2]));
+  const boost = (kind,ref)=> TOPKEY.has(kind+"|"+ref) ? 100 : 0;
+  PLN = H.pl.map((p,i)=>({q:norm(p[0]), n:p[0], c:H.cats[p[1]], s:p[4]+boost(0,i), i, kind:0}));
+  STN = H.names.map(n=>({q:norm(n), n, c:"Street", s:2+boost(1,n), i:n, kind:1}));
+}
+function placeXY(i){ const p=H.pl[i]; return [H.ox+p[2]*H.qs, H.oy+p[3]*H.qs]; }
+function streetXY(name){
+  const ids=nameIndex.get(name); if(!ids) return null;
+  let x=0,y=0,n=0;
+  for(const si of ids){ const off=SEGOFF[si];
+    for(let k=0;k<SEGN[si];k++){ x+=D.sX[off+k]; y+=D.sY[off+k]; n++; } }
+  return n ? [x/n,y/n] : null;
+}
+function entryXY(e){ return e.kind===0 ? placeXY(e.i) : streetXY(e.i); }
+function searchDest(q){
+  const n=norm(q);
+  if(!n) return H.top.map(t=>({n:t[0], c:"", i:t[2], kind:t[1], hi:0}));
+  const out=[];
+  for(const src of [PLN,STN])
+    for(const e of src){
+      const at=e.q.indexOf(n);
+      if(at<0) continue;
+      out.push({...e, hi:at});
+      if(out.length>1200) break;
+    }
+  out.sort((a,b)=> (b.s>=100?1:0)-(a.s>=100?1:0) || (a.hi===0?0:1)-(b.hi===0?0:1) ||
+                   a.hi-b.hi || (b.s-a.s) || a.n.length-b.n.length || a.n.localeCompare(b.n));
+  return out.slice(0,40);
+}
+function labelForNode(n){
+  for(let p=HEADi[n];p<HEADi[n+1];p++){
+    const ni=D.name[D.eSeg[ADJE[p]]];
+    if(ni!==65535) return H.names[ni];
+  }
+  let best=null,bd=200*200;
+  for(let i=0;i<H.pl.length;i++){
+    const c=placeXY(i), dx=c[0]-NODEX[n], dy=c[1]-NODEY[n], d=dx*dx+dy*dy;
+    if(d<bd){bd=d;best=H.pl[i][0];}
+  }
+  return best ? "near "+best : "a spot on the map";
+}
+
+/* ---------- route panel ---------- */
+const fmtLen = m => m>=1000 ? (m/1000).toFixed(m<10000?2:1)+" km" : Math.round(m)+" m";
+const fmtMin = m => Math.max(1,Math.round(m/75))+" min";
+function openRoute(){
+  st.routing=true; $("#btnRoute").setAttribute("aria-pressed","true");
+  $("#card").classList.remove("open"); st.hi=null; st.sel=null;
+  $("#rcard").classList.add("open");
+  if(st.a<0) openPick("a"); else renderRoute();
+  schedule(false);
+}
+function closeRoute(){
+  st.routing=false; $("#btnRoute").setAttribute("aria-pressed","false");
+  $("#rcard").classList.remove("open","picking");
+  st.a=-1; st.b=-1; st.aL=""; st.bL=""; st.pick=null; st.mapPick=null;
+  st.route=null; st.refRoute=null; schedule(false);
+}
+function renderRoute(){
+  const card=$("#rcard");
+  document.querySelectorAll(".rm").forEach(b=>
+    b.setAttribute("aria-pressed", parseFloat(b.dataset.k)===st.k));
+  $("#rFromL").textContent = st.aL || "Where are you now?";
+  $("#rToL").textContent   = st.bL || "Where are you going?";
+  $("#rFrom").classList.toggle("unset", !st.aL);
+  $("#rTo").classList.toggle("unset", !st.bL);
+  if(st.pick) return;
+  card.classList.remove("picking");
+  $("#rFrom").setAttribute("aria-expanded","false");
+  $("#rTo").setAttribute("aria-expanded","false");
+  if(st.a<0 || st.b<0){
+    card.classList.add("empty");
+    $("#rTitle").textContent = "Plan a shady walk";
+    $("#rSub").textContent   = st.a<0 && st.b<0 ? "Choose both ends of the walk."
+      : (st.a<0 ? "Now choose where you're starting." : "Now choose where you're going.");
+    return;
+  }
+  card.classList.remove("empty");
+  const r=st.route;
+  if(!r){ $("#rTitle").textContent="No walkable route";
+    $("#rSub").textContent="Those two points aren't joined in the street network.";
+    $("#rPct").textContent="\u2014"; $("#rCompare").innerHTML=""; return; }
+  $("#rTitle").textContent = fmtLen(r.len)+" \u00b7 "+fmtMin(r.len);
+  $("#rSub").textContent = "at "+fmtTime(st.ti)+", "+dayLabel()+" "+MONTH[st.mo]+
+    " \u00b7 "+Math.round(r.len*(1-r.shade/100))+" m in the sun";
+  $("#rPct").textContent = Math.round(r.shade);
+  $("#rBig").style.color = rampFor(r.shade);
+  const ref=st.refRoute;
+  if(ref && st.k>0){
+    const dL=r.len-ref.len, dS=r.shade-ref.shade;
+    $("#rCompare").innerHTML = dL<2 && dS<1
+      ? "This <b>is</b> the shortest way \u2014 no detour needed."
+      : "Shortest way: <b>"+fmtLen(ref.len)+"</b>, "+Math.round(ref.shade)+"% shade.<br>"+
+        "This one adds <b>"+fmtLen(Math.max(0,dL))+"</b> ("+fmtMin(Math.max(0,dL))+
+        ") for <span class=\"win\">"+(dS>=0?"+":"")+Math.round(dS)+" points</span> of shade.";
+  } else $("#rCompare").innerHTML = "Shortest walkable route \u2014 sun ignored.";
+  drawStrip("#rstrip", r.edges.map(e=>[D.eSeg[e], D.eLen[e]/10]), 56);
+  $("#rstripNow").textContent = fmtTime(st.ti)+" \u00b7 "+Math.round(r.shade)+"% shade";
+}
+function setEnd(which, node, label){
+  if(node<0) return;
+  if(which==="a"){ st.a=node; st.aL=label; } else { st.b=node; st.bL=label; }
+  st.pick=null; st.mapPick=null;
+  recompute(); renderRoute(); frameEnds(); schedule(true);
+}
+function setPoint(x,y){                      // legacy/manual map tap
+  const n=nearestNode(x,y); if(n<0) return;
+  const which = st.mapPick || (st.a<0 ? "a" : (st.b<0 ? "b" : "a"));
+  if(which==="a" && !st.mapPick && st.a>=0 && st.b>=0){ st.b=-1; st.bL=""; }
+  setEnd(which, n, labelForNode(n));
+}
+function frameEnds(){
+  if(st.a<0||st.b<0) return;
+  const x0=Math.min(NODEX[st.a],NODEX[st.b]), x1=Math.max(NODEX[st.a],NODEX[st.b]);
+  const y0=Math.min(NODEY[st.a],NODEY[st.b]), y1=Math.max(NODEY[st.a],NODEY[st.b]);
+  const card=$("#rcard");
+  const overlays = W < 520 && card.classList.contains("open");   // card sits over the map
+  const topPad=74, sidePad=52, botPad=(overlays ? card.offsetHeight+40 : 30);
+  const availW=Math.max(140, W-sidePad*2), availH=Math.max(140, Hh-topPad-botPad);
+  st.scale=Math.min(1.2, Math.max(0.05,
+    Math.min(availW/Math.max(x1-x0,120), availH/Math.max(y1-y0,120))));
+  const targetY = topPad + availH/2;
+  st.cx=(x0+x1)/2;
+  st.cy=(y0+y1)/2 + (targetY - Hh/2)/st.scale;
+}
+function openPick(which){
+  st.pick=which; st.mapPick=null;
+  $("#rcard").classList.add("picking");
+  $("#rFrom").setAttribute("aria-expanded", which==="a");
+  $("#rTo").setAttribute("aria-expanded", which==="b");
+  $("#pickMap").setAttribute("aria-pressed","false");
+  const inp=$("#rSearch");
+  inp.value=""; inp.placeholder = "Search places and streets";
+  applyGeoStatus(); renderResults(""); renderRoute();
+  if(!matchMedia("(hover: none)").matches) setTimeout(()=>inp.focus(),30);
+}
+function renderResults(q){
+  const rows=searchDest(q);
+  const box=$("#rResults");
+  if(!rows.length){ box.innerHTML='<div class="resnote">Nothing matched. Try a street name, '+
+    'a church, a piazza \u2014 or pick a point on the map.</div>'; return; }
+  const nq=norm(q);
+  box.innerHTML = rows.map((r,ix)=>{
+    let nm=r.n;
+    if(nq){ const at=norm(nm).indexOf(nq);
+      if(at>=0) nm = nm.slice(0,at)+"<em>"+nm.slice(at,at+nq.length)+"</em>"+nm.slice(at+nq.length); }
+    return '<button class="res" data-ix="'+ix+'"><span>'+nm+'</span><span class="cat">'+r.c+'</span></button>';
+  }).join("");
+  box.querySelectorAll(".res").forEach(btn=>btn.addEventListener("click",()=>{
+    const r=rows[+btn.dataset.ix], xy=entryXY(r);
+    if(!xy) return;
+    const n=nearestNode(xy[0],xy[1]);
+    if(n<0){ btn.outerHTML='<div class="resnote">'+r.n+
+      ' is outside the walking network on this map.</div>'; return; }
+    setEnd(st.pick, n, r.n);
+  }));
+}
+function frameContext(){
+  if(window.self === window.top) return "top";
+  try{ void window.top.location.origin; return "same"; }   // same-origin parent
+  catch(e){ return "cross"; }                              // cross-origin parent
+}
+function geoStatus(){
+  if(!navigator.geolocation) return "unsupported";
+  if(!window.isSecureContext) return "insecure";
+  try{
+    const fp = document.featurePolicy || document.permissionsPolicy;
+    if(fp && typeof fp.allowsFeature === "function" && !fp.allowsFeature("geolocation"))
+      return "blocked";
+  }catch(e){}
+  // Geolocation's default allowlist is 'self', so a cross-origin frame only gets it when the
+  // host page passes allow="geolocation". Browsers without featurePolicy can't be asked, so
+  // treat an embedded page as blocked rather than offering a button that fails.
+  if(frameContext() === "cross") return "blocked";
+  return "ok";
+}
+const GEONOTE = {
+  blocked:"This page is embedded in a frame that doesn't pass location through, so the browser "+
+          "won't offer it here. Search for where you are, or pick it on the map.",
+  insecure:"Location needs a secure page. Open this over https, or pick your start on the map.",
+  unsupported:"This browser doesn't offer location. Pick your start on the map instead."
+};
+function applyGeoStatus(){
+  const g=geoStatus();
+  const btn=$("#pickGeo"), note=$("#geoNote");
+  if(g!=="ok"){ btn.hidden=true; note.hidden=false; note.textContent=GEONOTE[g]; return; }
+  btn.hidden=false; note.hidden=true;
+  if(navigator.permissions && navigator.permissions.query){
+    navigator.permissions.query({name:"geolocation"}).then(st=>{
+      if(st.state==="denied"){
+        btn.hidden=true; note.hidden=false;
+        note.textContent="Location is turned off for this page in your browser settings. "+
+          "Turn it back on there, or pick your start on the map.";
+      }
+    }).catch(()=>{});
+  }
+}
+function useGeo(){
+  const btn=$("#pickGeo");
+  btn.textContent="Locating\u2026"; btn.disabled=true;
+  navigator.geolocation.getCurrentPosition(pos=>{
+    btn.textContent="Use my location"; btn.disabled=false;
+    const x=(pos.coords.longitude-H.proj.lon0)*H.proj.mperlon;
+    const y=(pos.coords.latitude -H.proj.lat0)*H.proj.mperlat;
+    const b=H.bbox;
+    if(x<b.x0-300||x>b.x1+300||y<b.y0-300||y>b.y1+300){
+      $("#rResults").innerHTML='<div class="resnote">You\'re outside the area this map covers '+
+        '(the historic centre). Search for a place instead.</div>'; return; }
+    const n=nearestNode(x,y);
+    if(n<0){ $("#rResults").innerHTML='<div class="resnote">No walkable street near you.</div>'; return; }
+    setEnd(st.pick, n, "My location \u00b7 "+labelForNode(n));
+  }, err=>{
+    btn.textContent="Use my location"; btn.disabled=false;
+    const framed = frameContext() !== "top";
+    const asFile = location.protocol === "file:";
+    const msg = err.code===1
+        ? (framed ? GEONOTE.blocked
+         : asFile ? "Opened straight from a file, some browsers \u2014 Safari especially \u2014 "+
+                    "won't hand over a location at all. Pick your start on the map, or open this "+
+                    "page from a web address."
+         : "The browser refused the location. If you didn't turn it down yourself, check this "+
+           "site's location permission in your browser settings. Either way, you can search for "+
+           "where you are or pick it on the map.")
+      : err.code===2 ? "Your device couldn't get a fix \u2014 common indoors. Try again outside, "+
+                       "or pick your start on the map."
+      : "Location timed out. Try again, or pick your start on the map.";
+    if(framed){ btn.hidden=true; $("#geoNote").hidden=false; $("#geoNote").textContent=GEONOTE.blocked; }
+    $("#rResults").innerHTML='<div class="resnote">'+msg+'</div>';
+  }, {enableHighAccuracy:true, timeout:12000, maximumAge:60000});
+}
+
+/* ---------- picking ---------- */
+function pick(px,py){
+  const wx=ux(px), wy=uy(py), R=Math.max(10, 16/st.scale);
+  let best=-1, bd=R*R;
+  for(let i=0;i<H.nseg;i++){
+    const off=SEGOFF[i], n=SEGN[i];
+    for(let k=0;k<n-1;k++){
+      const ax=D.sX[off+k],ay=D.sY[off+k],bx=D.sX[off+k+1],by=D.sY[off+k+1];
+      const dx=bx-ax,dy=by-ay,L=dx*dx+dy*dy;
+      let t=L>0?((wx-ax)*dx+(wy-ay)*dy)/L:0; t=t<0?0:(t>1?1:t);
+      const ex=wx-(ax+dx*t), ey=wy-(ay+dy*t), d=ex*ex+ey*ey;
+      if(d<bd){bd=d;best=i;}
+    }
+  }
+  return best;
+}
+
+/* ---------- interaction ---------- */
+let ptrs=new Map(), lastDist=0, moved=0, dragging=false;
+const UIHIT = '#top, #card, #rcard, #sheet, #legend';
+stage.addEventListener("pointerdown", e=>{
+  if(e.target.closest && e.target.closest(UIHIT)) return;   // let the controls have the tap
+  stage.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  moved=0; dragging=true; stage.classList.add("drag");
+  if(ptrs.size===2){ const p=[...ptrs.values()]; lastDist=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y); }
+});
+stage.addEventListener("pointermove", e=>{
+  if(!ptrs.has(e.pointerId)) return;
+  const prev=ptrs.get(e.pointerId);
+  const dx=e.clientX-prev.x, dy=e.clientY-prev.y;
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  moved += Math.abs(dx)+Math.abs(dy);
+  if(ptrs.size===2){
+    const p=[...ptrs.values()], d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);
+    if(lastDist>0){
+      const r=stage.getBoundingClientRect();
+      const mx=(p[0].x+p[1].x)/2-r.left, my=(p[0].y+p[1].y)/2-r.top;
+      zoomAt(mx,my,d/lastDist);
+    }
+    lastDist=d;
+  } else {
+    st.cx -= dx/st.scale; st.cy += dy/st.scale; clampView(); schedule(true);
+  }
+});
+function endPtr(e){
+  if(ptrs.size===1 && moved<8 && dragging){
+    const r=stage.getBoundingClientRect();
+    if(st.routing){ setPoint(ux(e.clientX-r.left), uy(e.clientY-r.top)); }
+    else {
+      const i=pick(e.clientX-r.left, e.clientY-r.top);
+      if(i>=0) selectSeg(i); else { st.hi=null; st.sel=null; $("#card").classList.remove("open"); schedule(false); }
+    }
+  }
+  ptrs.delete(e.pointerId); if(ptrs.size<2) lastDist=0;
+  if(ptrs.size===0){ dragging=false; stage.classList.remove("drag"); }
+}
+stage.addEventListener("pointerup", endPtr);
+stage.addEventListener("pointercancel", e=>{ptrs.delete(e.pointerId);dragging=false;stage.classList.remove("drag");});
+function zoomAt(mx,my,f){
+  const wx=ux(mx), wy=uy(my);
+  st.scale = Math.max(0.045, Math.min(6, st.scale*f));
+  st.cx = wx - (mx - W/2)/st.scale;
+  st.cy = wy + (my - Hh/2)/st.scale;
+  clampView(); schedule(true);
+}
+stage.addEventListener("wheel", e=>{
+  if(e.target.closest && e.target.closest('#sheet, #card, #rcard')) return;
+  e.preventDefault();
+  const r=stage.getBoundingClientRect();
+  zoomAt(e.clientX-r.left, e.clientY-r.top, Math.exp(-e.deltaY*0.0016));
+},{passive:false});
+function clampView(){
+  const b=H.bbox, m=400;
+  st.cx=Math.max(b.x0-m,Math.min(b.x1+m,st.cx));
+  st.cy=Math.max(b.y0-m,Math.min(b.y1+m,st.cy));
+}
+
+/* ---------- controls ---------- */
+$("#time").addEventListener("input", e=>{ st.ti=+e.target.value; stop(); updateReadouts(); schedule(false); });
+function stop(){ const was=st.playing; st.playing=false; if(was) setTimeout(renderList,0); $("#btnPlay").textContent="\u25b6 Play day"; if(st.raf){clearInterval(st.raf);st.raf=0;} }
+$("#btnPlay").addEventListener("click", ()=>{
+  if(st.playing){ stop(); return; }
+  st.playing=true; $("#btnPlay").textContent="\u275a\u275a Pause";
+  st.raf=setInterval(()=>{ st.ti=(st.ti+1)%32; updateReadouts(); drawLines(); drawOver(); }, 190);
+  renderList();
+});
+$("#btnRoute").addEventListener("click", ()=> st.routing ? closeRoute() : openRoute());
+$("#rClose").addEventListener("click", closeRoute);
+$("#rFrom").addEventListener("click", ()=> st.pick==="a" ? (st.pick=null, renderRoute()) : openPick("a"));
+$("#rTo").addEventListener("click",   ()=> st.pick==="b" ? (st.pick=null, renderRoute()) : openPick("b"));
+$("#rSwap").addEventListener("click", ()=>{
+  const a=st.a,al=st.aL; st.a=st.b; st.aL=st.bL; st.b=a; st.bL=al;
+  st.pick=null; recompute(); renderRoute(); schedule(false); });
+$("#rSearch").addEventListener("input", e=>renderResults(e.target.value));
+$("#pickGeo").addEventListener("click", useGeo);
+$("#pickMap").addEventListener("click", ()=>{
+  st.mapPick=st.pick; $("#pickMap").setAttribute("aria-pressed","true");
+  $("#rResults").innerHTML='<div class="resnote">Tap anywhere on the map to drop '+
+    (st.pick==="a"?"the start":"the destination")+'. The nearest street is used.</div>'; });
+document.querySelectorAll(".rm").forEach(b=>b.addEventListener("click", ()=>{
+  st.k=parseFloat(b.dataset.k); recompute(); renderRoute(); schedule(false); }));
+$("#btnList").addEventListener("click", ()=> sheetOpen && sheetTab!=="how" ? closeSheet() : openSheet("shade"));
+$("#btnInfo").addEventListener("click", ()=> sheetOpen && sheetTab==="how" ? closeSheet() : openSheet("how"));
+$("#sClose").addEventListener("click", closeSheet);
+$("#cClose").addEventListener("click", ()=>{ $("#card").classList.remove("open"); st.hi=null; st.sel=null; schedule(false); });
+$("#tabShade").addEventListener("click", ()=>openSheet("shade"));
+$("#tabSun").addEventListener("click", ()=>openSheet("sun"));
+$("#tabHow").addEventListener("click", ()=>openSheet("how"));
+$("#search").addEventListener("keydown", e=>{
+  if(e.key!=="Enter") return;
+  const q=e.target.value.trim().toLowerCase(); if(!q) return;
+  let hit=null;
+  for(const nm of nameIndex.keys()) if(nm.toLowerCase()===q){hit=nm;break;}
+  if(!hit) for(const nm of nameIndex.keys()) if(nm.toLowerCase().includes(q)){hit=nm;break;}
+  if(hit){ selectName(hit); e.target.blur(); }
+  else { e.target.value=""; e.target.placeholder="No street matched \u2014 try again"; }
+});
+window.addEventListener("resize", resize);
+try{
+  const mq = matchMedia("(prefers-color-scheme: dark)");
+  const onTheme = ()=>{ readColors(); drawAll(); };
+  if(mq.addEventListener) mq.addEventListener("change", onTheme);
+  else if(mq.addListener) mq.addListener(onTheme);          // older WebKit
+}catch(e){}
+
+/* ---------- boot ---------- */
+(async function boot(){
+  try{
+    const raw = document.getElementById("payload").textContent.trim();
+    $("#lmsg").textContent = "Unpacking shadows\u2026";
+    const gz = b64bytes(raw);
+    await new Promise(r=>setTimeout(r,16));          // let that message paint first
+    const buf = gunzip(gz).buffer;
+    const hlen = new DataView(buf).getUint32(0, true);
+    H = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, hlen)));
+    H.hoff = 4 + hlen;
+    const qs=H.qs, ox=H.ox, oy=H.oy;
+    const dq = (u16, o) => { const f=new Float32Array(u16.length);
+      for(let i=0;i<u16.length;i++) f[i]=o+u16[i]*qs; return f; };
+    D.bcnt=view(buf,"bcnt"); D.bX=dq(view(buf,"bx"),ox); D.bY=dq(view(buf,"by"),oy);
+    D.wcnt=view(buf,"wcnt"); D.wX=dq(view(buf,"wx"),ox); D.wY=dq(view(buf,"wy"),oy);
+    D.gcnt=view(buf,"gcnt"); D.gX=dq(view(buf,"gx"),ox); D.gY=dq(view(buf,"gy"),oy);
+    D.scnt=view(buf,"scnt"); D.sX=dq(view(buf,"sx"),ox); D.sY=dq(view(buf,"sy"),oy);
+    D.kind=view(buf,"kind"); D.name=view(buf,"name"); D.cov=view(buf,"cov");
+    D.shade=view(buf,"shade");
+    D.eSeg=view(buf,"eSeg"); D.eI0=view(buf,"eI0"); D.eI1=view(buf,"eI1");
+    D.eU=view(buf,"eU"); D.eV=view(buf,"eV"); D.eLen=view(buf,"eLen");
+    prepSegs(); buildNameIndex(); computeCityAvg(); readColors(); buildGraph(); buildSearch();
+
+    // months
+    const mc=$("#months");
+    mc.querySelectorAll(".dy").forEach(b=>b.addEventListener("click",()=>{
+      st.day=+b.dataset.d; stop(); updateReadouts(); schedule(false); }));
+    MONTH.forEach((m,i)=>{ const b=document.createElement("button");
+      b.className="mo"; b.textContent=m; b.setAttribute("aria-pressed", i===st.mo);
+      b.addEventListener("click",()=>{ st.mo=i; stop(); updateReadouts(); schedule(false); });
+      mc.appendChild(b); });
+
+    const b=H.bbox;
+    st.cx=(b.x0+b.x1)/2; st.cy=(b.y0+b.y1)/2;
+    resize();
+    st.scale = Math.min(0.34, Math.max(W/(b.x1-b.x0), Hh/(b.y1-b.y0)));
+    updateReadouts(); drawAll(); renderList();
+    // centre the summer-afternoon month chip
+    const chip = mc.querySelectorAll(".mo")[st.mo];
+    if(chip) mc.scrollLeft = chip.offsetLeft - mc.clientWidth/2 + chip.clientWidth/2;
+    window.ombra = {st, setPoint, setEnd, openPick, searchDest, entryXY, recompute,
+                    renderRoute, frameIndex, nearestNode, labelForNode,
+                    nodeXY:i=>[NODEX[i],NODEY[i]], comp:i=>COMP[i], bigc:()=>BIGC,
+                    get data(){return D}, get head(){return H}};
+    $("#loading").style.display="none";
+  }catch(err){
+    $("#lmsg").innerHTML = "Couldn't load the map data.<br><span style='font-size:11px'>"+
+      String(err && err.message || err).replace(/[<>&]/g,"")+"</span>";
+    console.error(err);
+  }
+})();
+})();
+</script>

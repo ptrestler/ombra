@@ -1,0 +1,6 @@
+# The build writes LF deliberately (newline="\n" in build_standalone.py and
+# build_artifact.py). Normalise in the repo so Windows checkouts don't rewrite
+# the template and change the byte output of every build.
+* text=auto eol=lf
+*.png binary
+*.npy binary
