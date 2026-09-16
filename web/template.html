@@ -25,20 +25,20 @@
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     color-scheme: dark;
-    --ground:#131217;
-    --bldg:#232029;
-    --bldg-line:#302c39;
-    --water:#182530;
-    --green:#1b2620;
+    --ground:#171d28;
+    --bldg:#232b38;
+    --bldg-line:#2f3846;
+    --water:#1b2733;
+    --green:#1e2a26;
     --ink:#f5efe4;
     --ink-2:#c4bab0;
     --muted:#968d84;
-    --panel:#1b1a20;
-    --panel-2:#252430;
-    --line:#332f3c;
-    --shade:#1c60ab;
-    --sun:#c9203c;
-    --mid:#7a3f9e;
+    --panel:#1c2330;
+    --panel-2:#262f3d;
+    --line:#313b4a;
+    --shade:#84b4d8;
+    --sun:#df8490;
+    --mid:#a892cd;
     --accent:#3f93d6;
     --accent-ink:#0d1218;
     --shadow:0 2px 6px rgba(0,0,0,.4),0 14px 40px rgba(0,0,0,.5);
@@ -46,20 +46,20 @@
 }
 :root[data-theme="dark"]{
   color-scheme: dark;
-  --ground:#131217;
-  --bldg:#232029;
-  --bldg-line:#302c39;
-  --water:#182530;
-  --green:#1b2620;
+  --ground:#171d28;
+  --bldg:#232b38;
+  --bldg-line:#2f3846;
+  --water:#1b2733;
+  --green:#1e2a26;
   --ink:#f5efe4;
   --ink-2:#c4bab0;
   --muted:#968d84;
-  --panel:#1b1a20;
-  --panel-2:#252430;
-  --line:#332f3c;
-  --shade:#1c60ab;
-  --sun:#c9203c;
-  --mid:#7a3f9e;
+  --panel:#1c2330;
+  --panel-2:#262f3d;
+  --line:#313b4a;
+  --shade:#84b4d8;
+  --sun:#df8490;
+  --mid:#a892cd;
   --accent:#3f93d6;
   --accent-ink:#0d1218;
   --shadow:0 2px 6px rgba(0,0,0,.4),0 14px 40px rgba(0,0,0,.5);
@@ -79,10 +79,14 @@
 }
 :root[data-ui-theme="dark"]{
   color-scheme: dark;
-  --ground:#131217; --bldg:#232029; --bldg-line:#302c39; --water:#182530;
-  --green:#1b2620; --ink:#f5efe4; --ink-2:#c4bab0; --muted:#968d84;
-  --panel:#1b1a20; --panel-2:#252430; --line:#332f3c;
-  --shade:#1c60ab; --sun:#c9203c; --mid:#7a3f9e;
+  --ground:#171d28; --bldg:#232b38; --bldg-line:#2f3846; --water:#1b2733;
+  --green:#1e2a26; --ink:#f5efe4; --ink-2:#c4bab0; --muted:#968d84;
+  --panel:#1c2330; --panel-2:#262f3d; --line:#313b4a;
+  /* Dark needs its own ramp. These used to be the light palette's exact three,
+     which were picked against cream: on a dark ground they sit *below* it in
+     lightness, so the red glared and the blue vanished. Lifted and desaturated,
+     on a navy rather than a near-black ground. */
+  --shade:#84b4d8; --sun:#df8490; --mid:#a892cd;
   --accent:#3f93d6; --accent-ink:#0d1218;
   --shadow:0 2px 6px rgba(0,0,0,.4),0 14px 40px rgba(0,0,0,.5);
 }
@@ -1382,9 +1386,22 @@ function renderRoute(){
 }
 function setEnd(which, node, label){
   if(node<0) return;
+  const wasMap = st.mapPick;
   if(which==="a"){ st.a=node; st.aL=label; } else { st.b=node; st.bL=label; }
   st.pick=null; st.mapPick=null;
   recompute(); renderRoute(); frameEnds(); schedule(true);
+  // Answering "where are you now?" always means the next question is "where are
+  // you going?". Ask it instead of making them tap the other end. Only when that
+  // end is still blank, so editing one leg of a finished route stays put - and if
+  // they were dropping pins on the map, stay in that mode rather than yanking
+  // them back to the search box.
+  const next = (which==="a" && st.b<0) ? "b" : ((which==="b" && st.a<0) ? "a" : null);
+  if(next){ openPick(next); if(wasMap) startMapPick(); }
+}
+function startMapPick(){
+  st.mapPick=st.pick; $("#pickMap").setAttribute("aria-pressed","true");
+  $("#rResults").innerHTML='<div class="resnote">Tap anywhere on the map to drop '+
+    (st.pick==="a"?"the start":"the destination")+'. The nearest street is used.</div>';
 }
 function setPoint(x,y){                      // legacy/manual map tap
   const n=nearestNode(x,y); if(n<0) return;
@@ -1689,10 +1706,7 @@ $("#rSwap").addEventListener("click", ()=>{
   st.pick=null; recompute(); renderRoute(); schedule(false); });
 $("#rSearch").addEventListener("input", e=>renderResults(e.target.value));
 $("#pickGeo").addEventListener("click", useGeo);
-$("#pickMap").addEventListener("click", ()=>{
-  st.mapPick=st.pick; $("#pickMap").setAttribute("aria-pressed","true");
-  $("#rResults").innerHTML='<div class="resnote">Tap anywhere on the map to drop '+
-    (st.pick==="a"?"the start":"the destination")+'. The nearest street is used.</div>'; });
+$("#pickMap").addEventListener("click", startMapPick);
 document.querySelectorAll(".rm").forEach(b=>b.addEventListener("click", ()=>{
   st.k=parseFloat(b.dataset.k); recompute(); renderRoute(); schedule(false); }));
 $("#btnList").addEventListener("click", ()=> sheetOpen && sheetTab!=="how" ? closeSheet() : openSheet("shade"));

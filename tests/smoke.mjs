@@ -97,7 +97,10 @@ async function run(engine, label, breakStreams, which) {
     check('empty picker stays open when tapped',
           await p.evaluate(() => document.querySelector('#rcard').classList.contains('picking')));
     await p.fill('#rSearch', 'Pantheon'); await p.waitForTimeout(200); await p.click('.res');
-    await p.waitForTimeout(300);
+    await p.waitForTimeout(400);
+    // answering "where are you now?" should ask "where are you going?" by itself
+    check('picking the start moves straight on to the destination',
+          await p.evaluate(() => window.ombra.st.pick) === 'b');
     await p.click('#rTo'); await p.fill('#rSearch', 'Colosseo'); await p.waitForTimeout(200);
     await p.click('.res'); await p.waitForTimeout(600);
     const km = await p.textContent('#rTitle');
