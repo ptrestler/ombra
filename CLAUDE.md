@@ -14,7 +14,7 @@ pip install -r requirements.txt && npm install
 npx playwright install chromium webkit    # both; make test needs WebKit too
 make            # full build (data is cached, so ~10 min)
 make artifact   # build/artifact.html, the file you publish as an Artifact
-make test       # model checks + browser checks in Chromium and WebKit
+make test       # needs a build first; model + browser checks (Chromium, WebKit)
 make clean      # drop derived files, keep downloads
 ```
 
@@ -54,6 +54,11 @@ Frames are the 1st and 15th of each month, every 30 min from 06:00 to 21:30
 (24 dates × 32 slots = 768). Times are Rome civil time with real EU DST dates.
 
 ## Things that will bite you
+
+**`make test` needs a build first.** The Commands block above is in dependency
+order, not a menu. On a fresh clone `build/` is empty, so `tests/validate.py`
+has nothing to read and exits with `build it first: make`. Run `make` first.
+`make clean` deliberately returns you to that state.
 
 **Overpass mirrors are the worst part of this project.** `overpass-api.de`
 resets connections from cloud IPs; `overpass.osm.ch` answers with *zero

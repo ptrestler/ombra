@@ -8,6 +8,15 @@ from paths import build
 from solar import solar_pos
 from geo import to_xy
 
+# These checks read build/. On a fresh clone it is empty, so fail with the same
+# message smoke.mjs gives rather than an opaque FileNotFoundError.
+NEEDED = ["frames_meta.json", "ground_meta.json", "frames.npy", "segments.json", "graph.npz"]
+_missing = [f for f in NEEDED if not os.path.exists(build(f))]
+if _missing:
+    print("build it first: make", file=sys.stderr)
+    print("  missing from build/: " + ", ".join(_missing), file=sys.stderr)
+    sys.exit(1)
+
 LAT, LON = 41.9028, 12.4964
 fails = []
 def check(name, ok, detail=""):
