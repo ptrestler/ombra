@@ -13,16 +13,16 @@ fetch:
 
 ## rasters -- 2 m building/canopy grid, 10 m terrain grid
 rasters: build/dsm.npy build/ground.npy
-build/dsm.npy:
+build/dsm.npy: build_dsm.py heights.py geo.py
 	$(PY) build_dsm.py
-build/ground.npy: build/terr.npy
+build/ground.npy: build/terr.npy ground.py
 	$(PY) ground.py
-build/terr.npy:
+build/terr.npy: terrain.py geo.py
 	$(PY) terrain.py
 
 ## shade -- the expensive stage: 768 sun positions x 39k street segments (~7 min)
 shade: build/frames.npy
-build/frames.npy: build/dsm.npy build/ground.npy
+build/frames.npy: build/dsm.npy build/ground.npy shade.py solar.py streets.py geo.py
 	$(PY) shade.py
 
 ## web -- routing graph, destination list, payload, the standalone build

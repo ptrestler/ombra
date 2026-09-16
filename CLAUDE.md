@@ -152,6 +152,7 @@ segment's shade over consecutive half-hours is smooth.
 |---|---|
 | Relief error vs known heights | **9.8 m** (flat-earth model was 44.9 m) |
 | Buildings with a real OSM height | 2,443 of 14,158 — the other 83 % are estimated from tagged neighbours |
+| Error of those estimates | **RMSE 5.83 m**, MAE 4.19 m, bias −0.05 m — leave-one-out against the 2,443 tagged |
 | Walking network | 54,530 links, ~988 km, 97 % one connected component |
 | Median detour index | 1.22 (healthy pedestrian networks are 1.20–1.35) |
 | Sunrise/sunset vs published | within 4 min at both solstices and the equinox |
