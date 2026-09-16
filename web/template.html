@@ -134,16 +134,14 @@ button{cursor:pointer}
 .ticks{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);
   font-variant-numeric:tabular-nums;margin:-2px 0 9px}
 
-.months{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;margin:0 -12px 9px;
-  padding-left:12px;padding-right:12px;scrollbar-width:none;scroll-padding-left:96px}
-.months::-webkit-scrollbar{display:none}
-.mo{flex:0 0 auto;padding:6px 11px;border-radius:999px;border:1px solid var(--line);
+/* All twelve months are visible at once, two rows of six, so the year reads as
+   two half-years. The old horizontal scroller showed 5 of 12 with no scrollbar. */
+.months{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;margin:0 0 9px}
+.mo{padding:6px 4px;border-radius:999px;border:1px solid var(--line);text-align:center;
   background:transparent;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--ink-2)}
-.dayseg{flex:0 0 auto;position:sticky;left:0;z-index:2;display:flex;gap:3px;
-  padding-right:11px;margin-right:2px;background:var(--panel);
-  box-shadow:20px 0 0 -2px var(--panel), 30px 0 12px -8px var(--panel)}
-.dayseg::after{content:"";position:absolute;right:4px;top:5px;bottom:5px;width:1px;background:var(--line)}
-.dy{flex:0 0 auto;padding:6px 9px;border-radius:999px;border:1px solid var(--line);
+.dayseg{grid-column:1 / -1;display:flex;gap:5px;align-items:center;
+  padding-bottom:7px;margin-bottom:1px;border-bottom:1px solid var(--line)}
+.dy{flex:0 0 auto;padding:6px 13px;border-radius:999px;border:1px solid var(--line);
   background:transparent;font-size:11.5px;font-weight:600;color:var(--muted)}
 .dy[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:transparent}
 .mo[aria-pressed="true"]{background:var(--ink);color:var(--ground);border-color:var(--ink)}
@@ -1610,9 +1608,6 @@ try{
     resize();
     st.scale = Math.min(0.34, Math.max(W/(b.x1-b.x0), Hh/(b.y1-b.y0)));
     updateReadouts(); drawAll(); renderList();
-    // centre the summer-afternoon month chip
-    const chip = mc.querySelectorAll(".mo")[st.mo];
-    if(chip) mc.scrollLeft = chip.offsetLeft - mc.clientWidth/2 + chip.clientWidth/2;
     window.ombra = {st, setPoint, setEnd, openPick, searchDest, entryXY, recompute,
                     renderRoute, frameIndex, nearestNode, labelForNode,
                     nodeXY:i=>[NODEX[i],NODEY[i]], comp:i=>COMP[i], bigc:()=>BIGC,
