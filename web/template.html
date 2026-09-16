@@ -134,6 +134,9 @@ button{cursor:pointer}
   border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 88%,transparent);
   backdrop-filter:blur(10px);box-shadow:var(--shadow);font-size:15px;line-height:1}
 .iconbtn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+/* Shows the unit in use rather than the one you would switch to: it doubles as a
+   readout, so a number never has to be measured against a guess. */
+.unitbtn{font-size:12px;font-weight:600;letter-spacing:.01em}
 
 /* ---------- zoom controls ---------- */
 /* Scroll-to-zoom is invisible until you try it, and on a trackpad or in Firefox
@@ -392,6 +395,7 @@ tr.row:hover td{background:var(--panel-2)}
       <div class="topbtns">
         <button class="iconbtn" id="btnList" title="Shadiest streets" aria-label="Shadiest streets">&#9776;</button>
         <button class="iconbtn" id="btnInfo" title="How this works" aria-label="How this works">?</button>
+        <button class="iconbtn unitbtn" id="btnUnits">km</button>
         <button class="iconbtn" id="btnTheme" title="Switch to dark mode" aria-label="Switch to dark mode">&#9790;</button>
       </div>
     </div>
@@ -553,13 +557,44 @@ function readColors(){
   const g = n => CS.getPropertyValue(n).trim();
   C = {ground:g("--ground"),bldg:g("--bldg"),bldgLine:g("--bldg-line"),water:g("--water"),
        green:g("--green"),ink:g("--ink"),ink2:g("--ink-2"),muted:g("--muted"),
-       shade:g("--shade"),sun:g("--sun"),mid:g("--mid"),panel:g("--panel"),line:g("--line"),
+       shade:g("--shade"),sun:g("--sun"),mid:g("--mid"),panel:g("--panel"),
+       panel2:g("--panel-2"),line:g("--line"),
        accent:g("--accent")};
   buildRamp();
 }
 function hex2rgb(h){h=h.replace("#","");
   if(h.length===3)h=h.split("").map(c=>c+c).join("");
   return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+/* The ramp is tuned for thin lines over the map. Used as 31px text on a panel
+   the middle of it reads badly - a 73% lands on a mid violet that all but
+   disappears into the dark panel. Keep the hue, because it is what ties the
+   number to the colour of the street, but walk it toward the panel's own text
+   colour until it clears 4.5:1 against the panel. Works both ways round: on
+   cream --ink is dark, so the same loop deepens instead of lightening. */
+const _lum = c => { const f = x => { x/=255; return x<=0.03928 ? x/12.92
+                      : Math.pow((x+0.055)/1.055, 2.4); };
+  return 0.2126*f(c[0]) + 0.7152*f(c[1]) + 0.0722*f(c[2]); };
+const _contrast = (a,b) => { const x=_lum(a), y=_lum(b);
+  return (Math.max(x,y)+0.05) / (Math.min(x,y)+0.05); };
+/* The ramp is stored as "rgb(r,g,b)" strings and the tokens as hex; feeding the
+   former to hex2rgb parsed nonsense, the contrast test never passed, and every
+   number came out the same flat ink. */
+const toRGB = s => { s = s.trim();
+  if(s[0] === "#") return hex2rgb(s);
+  const n = s.slice(s.indexOf("(")+1, s.indexOf(")")).split(",");
+  return [+n[0], +n[1], +n[2]]; };
+function rampInk(v){
+  const base = toRGB(rampFor(v)), ink = toRGB(C.ink);
+  // the route card sits on --panel-2 in the sidebar and --panel on a phone, so
+  // clear the harder of the two rather than picking one and being wrong on the
+  // other device
+  const bgs = [toRGB(C.panel), toRGB(C.panel2)];
+  const worst = c => Math.min(_contrast(c, bgs[0]), _contrast(c, bgs[1]));
+  let out = base;
+  for(let t=0.1; t<=1.0001 && worst(out) < 4.5; t+=0.1)
+    out = base.map((c,i) => c + (ink[i]-c)*t);
+  return "rgb(" + out.map(c=>Math.round(c)).join(",") + ")";
+}
 let RAMP=[];
 function buildRamp(){
   const a=hex2rgb(C.sun),b=hex2rgb(C.mid),c=hex2rgb(C.shade);
@@ -699,6 +734,14 @@ function nowFrame(){
     return {mo, day, ti};
   }catch(e){ return {mo:7, day:15, ti:16}; }
 }
+/* Distances are metric in the model and always will be - the panel describing
+   40-metre segments and a 2-metre height grid stays as it is. This only changes
+   what the app reports back: route lengths, street lengths, the detour, the
+   metres in the sun. */
+const UNIT_KEY = "ombra.units";
+let imperial = false;
+try{ imperial = localStorage.getItem(UNIT_KEY) === "mi"; }catch(e){}
+
 const NOW = nowFrame();
 /* Every hour on this page is Rome's, and nothing said so. It does not need
    saying to someone standing in Rome, where their clock and the map's agree -
@@ -993,7 +1036,7 @@ function renderList(){
     for(const r of top){
       html += '<tr class="row" data-name="'+r.nm.replace(/"/g,"&quot;")+'"><td>'+
         r.nm+'<br><span class="kindtag">'+(KINDLABEL[r.k]||r.k)+' \u00b7 '+
-        Math.round(r.n*40)+' m</span></td>'+
+        fmtLen(r.n*40)+'</span></td>'+
         '<td class="num"><span class="track"><i style="width:'+Math.max(6,Math.round(r.v*0.3))+
         'px;background:'+rampFor(r.v)+'"></i></span> '+
         '<span class="pct">'+Math.round(r.v)+'%</span></td></tr>';
@@ -1178,9 +1221,9 @@ function renderCard(){
   const v = s/ids.length;
   $("#cName").textContent = nm;
   $("#cSub").textContent = (KINDLABEL[H.kinds[D.kind[ids[0]]]]||"") + " \u00b7 " +
-    Math.round(ids.length*40) + " m \u00b7 " + dayLabel() + " " + MONTH[st.mo];
+    fmtLen(ids.length*40) + " \u00b7 " + dayLabel() + " " + MONTH[st.mo];
   $("#cPct").textContent = Math.round(v);
-  $("#cPct").parentElement.style.color = rampFor(v);
+  $("#cPct").parentElement.style.color = rampInk(v);
   drawStrip("#strip", ids.map(i=>[i,1]), 62);
   $("#stripNow").textContent = fmtTime(st.ti)+" \u00b7 "+Math.round(v)+"% shade";
 }
@@ -1412,7 +1455,17 @@ function labelForNode(n){
 }
 
 /* ---------- route panel ---------- */
-const fmtLen = m => m>=1000 ? (m/1000).toFixed(m<10000?2:1)+" km" : Math.round(m)+" m";
+/* Feet below a thousand of them, miles above - the same rule metric uses for
+   metres and kilometres, so both systems break at the same kind of distance
+   rather than at the same number. */
+const MI = 1609.344, FT = 3.280839895;
+const fmtLen = m => {
+  if(imperial){
+    const ft = m*FT;
+    return ft >= 1000 ? (m/MI).toFixed(m/MI < 10 ? 2 : 1)+" mi" : Math.round(ft)+" ft";
+  }
+  return m>=1000 ? (m/1000).toFixed(m<10000?2:1)+" km" : Math.round(m)+" m";
+};
 const fmtMin = m => Math.max(1,Math.round(m/75))+" min";
 function openRoute(){
   st.routing=true; stage.classList.add("routing");
@@ -1455,9 +1508,9 @@ function renderRoute(){
     $("#rPct").textContent="\u2014"; $("#rCompare").innerHTML=""; return; }
   $("#rTitle").textContent = fmtLen(r.len)+" \u00b7 "+fmtMin(r.len);
   $("#rSub").textContent = "at "+fmtTime(st.ti)+", "+dayLabel()+" "+MONTH[st.mo]+
-    " \u00b7 "+Math.round(r.len*(1-r.shade/100))+" m in the sun";
+    " \u00b7 "+fmtLen(r.len*(1-r.shade/100))+" in the sun";
   $("#rPct").textContent = Math.round(r.shade);
-  $("#rBig").style.color = rampFor(r.shade);
+  $("#rBig").style.color = rampInk(r.shade);
   const ref=st.refRoute;
   if(ref && st.k>0){
     const dL=r.len-ref.len, dS=r.shade-ref.shade;
@@ -1753,6 +1806,24 @@ $("#conToggle").addEventListener("click", ()=>{
   setConsole(conCollapsed);
 });
 
+function applyUnits(){
+  const b = $("#btnUnits");
+  b.textContent = imperial ? "mi" : "km";
+  const label = imperial ? "Showing miles — switch to kilometres"
+                         : "Showing kilometres — switch to miles";
+  b.title = label; b.setAttribute("aria-label", label);
+  // repaint whatever is on screen that quotes a distance
+  if($("#card").classList.contains("open")) renderCard();
+  if(st.route) renderRoute();
+  if(sheetOpen && sheetTab!=="how") renderList();
+}
+applyUnits();
+$("#btnUnits").addEventListener("click", ()=>{
+  imperial = !imperial;
+  try{ localStorage.setItem(UNIT_KEY, imperial ? "mi" : "km"); }catch(e){}
+  applyUnits();
+});
+
 $("#btnZin").addEventListener("click",  ()=> zoomStep(1.7));
 $("#btnZout").addEventListener("click", ()=> zoomStep(1/1.7));
 $("#btnZfit").addEventListener("click", fitAll);
@@ -1908,7 +1979,7 @@ try{
     resize();
     fitAll();
     updateReadouts(); drawAll(); renderList();
-    window.ombra = {st, setPoint, setEnd, openPick, searchDest, entryXY, recompute,
+    window.ombra = {st, setPoint, setEnd, openPick, searchDest, entryXY, recompute, rampInk,
                     renderRoute, frameIndex, nearestNode, labelForNode,
                     nodeXY:i=>[NODEX[i],NODEY[i]], comp:i=>COMP[i], bigc:()=>BIGC,
                     get data(){return D}, get head(){return H}};

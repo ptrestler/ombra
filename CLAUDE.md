@@ -132,6 +132,15 @@ you at most one. iOS also will not open a local `.html` in Safari. So the
 standalone is a desktop and offline build; **the hosted artifact is the answer
 for a phone**, because it runs in a real browser.
 
+**Never paint text with `rampFor`.** The ramp is built for thin lines over the
+map; as 31 px numerals on a panel its middle disappears, and a route reading
+73 % rendered as an indigo you could not make out against the dark card. Use
+`rampInk`, which keeps the hue and walks it toward the panel's own text colour
+until it clears 4.5:1 against *both* `--panel` and `--panel-2` — the route card
+sits on one in the sidebar and the other on a phone. Note it returns
+`rgb(r,g,b)` while the tokens are hex; mixing the two up is what made the first
+attempt paint every number the same flat ink.
+
 **Test in WebKit, not just Chromium.** Three separate bugs (the Streams hang, the
 geolocation message, an unclickable close button behind a stacking context) were
 invisible in Chromium. `npx playwright install webkit` if it is missing.

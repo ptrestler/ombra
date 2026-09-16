@@ -168,6 +168,51 @@ async function run(engine, label, breakStreams, which) {
     await setClock(7, 15, 16);
     await p.evaluate(() => { window.ombra.recompute(); window.ombra.renderRoute(); });
     await p.waitForTimeout(300);
+    // The big percentage is painted with the map ramp, which is tuned for thin
+    // lines over a map, not 31px text on a panel: a 73% landed on an indigo that
+    // vanished into the dark card. rampInk keeps the hue and walks it toward the
+    // panel's text colour until it is legible, so check the whole range - and in
+    // both themes, because the fix has to work in each direction.
+    const worstRamp = () => p.evaluate(() => {
+      const T = s => { s = s.trim();
+        if (s[0] === '#') { let h = s.slice(1);
+          if (h.length === 3) h = h.split('').map(c => c + c).join('');
+          return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)]; }
+        const n = s.slice(s.indexOf('(')+1, s.indexOf(')')).split(',');
+        return [+n[0], +n[1], +n[2]]; };
+      const L = c => { const f = x => { x /= 255;
+        return x <= 0.03928 ? x/12.92 : Math.pow((x+0.055)/1.055, 2.4); };
+        return 0.2126*f(c[0]) + 0.7152*f(c[1]) + 0.0722*f(c[2]); };
+      const cr = (a,b) => { const x = L(a), y = L(b);
+        return (Math.max(x,y)+0.05) / (Math.min(x,y)+0.05); };
+      const cs = getComputedStyle(document.documentElement);
+      const p1 = T(cs.getPropertyValue('--panel')), p2 = T(cs.getPropertyValue('--panel-2'));
+      let worst = 99;
+      for (let v = 0; v <= 100; v++) {
+        const c = T(window.ombra.rampInk(v));
+        worst = Math.min(worst, cr(c,p1), cr(c,p2));
+      }
+      return +worst.toFixed(2);
+    });
+    const w1 = await worstRamp();
+    await p.click('#btnTheme'); await p.waitForTimeout(250);
+    const w2 = await worstRamp();
+    await p.click('#btnTheme'); await p.waitForTimeout(250);
+    check('every shade percentage stays legible on the card, both themes',
+          w1 >= 4.5 && w2 >= 4.5, `worst ${w1} and ${w2}`);
+
+    // metric and imperial, and the button says which you are looking at
+    const dist = () => p.evaluate(() => document.querySelector('#rTitle').textContent);
+    const inKm = await dist();
+    await p.click('#btnUnits'); await p.waitForTimeout(300);
+    const inMi = await dist();
+    check('distances switch between km and miles',
+          / km · /.test(inKm) && / mi · /.test(inMi) &&
+          await p.evaluate(() => document.querySelector('#btnUnits').textContent) === 'mi',
+          `${inKm}  ->  ${inMi}`);
+    await p.click('#btnUnits'); await p.waitForTimeout(300);
+    check('and switch back', await dist() === inKm);
+
     // must alternate, not recompute from the system each time - when storage is
     // blocked that bug makes the toggle stick on one theme for ever
     const gnd = () => p.evaluate(() => getComputedStyle(document.documentElement)
