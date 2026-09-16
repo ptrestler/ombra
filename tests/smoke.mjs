@@ -76,6 +76,14 @@ async function run(engine, label, breakStreams, which) {
     check('routes Pantheon to Colosseo', /km/.test(km), km);
     check('shows the shortest-route comparison',
           /Shortest way/.test(await p.textContent('#rCompare')));
+    // must alternate, not recompute from the system each time - when storage is
+    // blocked that bug makes the toggle stick on one theme for ever
+    const gnd = () => p.evaluate(() => getComputedStyle(document.documentElement)
+                                        .getPropertyValue('--ground').trim());
+    const t0 = await gnd();
+    await p.click('#btnTheme'); await p.waitForTimeout(250); const t1 = await gnd();
+    await p.click('#btnTheme'); await p.waitForTimeout(250); const t2 = await gnd();
+    check('theme toggle alternates', t0 !== t1 && t1 !== t2 && t0 === t2, `${t0} ${t1} ${t2}`);
     check('close button is clickable (z-order)',
           await p.locator('#rClose').isEnabled() &&
           await p.evaluate(() => { const r = document.querySelector('#rClose').getBoundingClientRect();

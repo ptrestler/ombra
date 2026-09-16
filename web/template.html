@@ -65,6 +65,28 @@
   --shadow:0 2px 6px rgba(0,0,0,.4),0 14px 40px rgba(0,0,0,.5);
 }
 
+/* An explicit in-page choice. Kept in data-ui-theme rather than data-theme
+   because the Artifact host stamps data-theme on the root itself and would
+   overwrite it. Declared last, so it beats both the media query and data-theme. */
+:root[data-ui-theme="light"]{
+  color-scheme: light;
+  --ground:#f2ece1; --bldg:#e3dacb; --bldg-line:#d3c7b3; --water:#c6d7e2;
+  --green:#d9ddc2; --ink:#1f1b16; --ink-2:#544c42; --muted:#7d7368;
+  --panel:#fbf7f0; --panel-2:#ede5d8; --line:#ded3c2;
+  --shade:#1c60ab; --sun:#c9203c; --mid:#7a3f9e;
+  --accent:#1b6aa8; --accent-ink:#ffffff;
+  --shadow:0 2px 6px rgba(40,30,18,.08),0 12px 32px rgba(40,30,18,.12);
+}
+:root[data-ui-theme="dark"]{
+  color-scheme: dark;
+  --ground:#131217; --bldg:#232029; --bldg-line:#302c39; --water:#182530;
+  --green:#1b2620; --ink:#f5efe4; --ink-2:#c4bab0; --muted:#968d84;
+  --panel:#1b1a20; --panel-2:#252430; --line:#332f3c;
+  --shade:#1c60ab; --sun:#c9203c; --mid:#7a3f9e;
+  --accent:#3f93d6; --accent-ink:#0d1218;
+  --shadow:0 2px 6px rgba(0,0,0,.4),0 14px 40px rgba(0,0,0,.5);
+}
+
 *{box-sizing:border-box}
 body{margin:0;background:var(--ground);color:var(--ink);
   font-family:Archivo,"Helvetica Neue",Helvetica,Arial,sans-serif;
@@ -297,6 +319,7 @@ tr.row:hover td{background:var(--panel-2)}
         <button class="iconbtn" id="btnRoute" title="Plan a shady walk" aria-label="Plan a shady walk" aria-pressed="false">&#8674;</button>
         <button class="iconbtn" id="btnList" title="Shadiest streets" aria-label="Shadiest streets">&#9776;</button>
         <button class="iconbtn" id="btnInfo" title="How this works" aria-label="How this works">?</button>
+        <button class="iconbtn" id="btnTheme" title="Switch to dark mode" aria-label="Switch to dark mode">&#9790;</button>
       </div>
     </div>
 
@@ -1576,9 +1599,41 @@ $("#search").addEventListener("keydown", e=>{
   else { e.target.value=""; e.target.placeholder="No street matched \u2014 try again"; }
 });
 window.addEventListener("resize", resize);
+/* ---------- light / dark ---------- */
+// No stored choice means follow the system, as before. Once the button is used the
+// choice sticks, which is the whole point - the system setting stops mattering.
+const THEME_KEY = "ombra.theme";
+const themePref = ()=>{ try{ return localStorage.getItem(THEME_KEY); }catch(e){ return null; } };
+const systemDark = ()=>{ try{ return matchMedia("(prefers-color-scheme: dark)").matches; }
+                         catch(e){ return false; } };
+// The effective choice is held here, not read back from storage: when storage is
+// unavailable the toggle would otherwise recompute from the system every time and
+// could never flip back.
+let themeNow = null;                       // null = still following the system
+const currentDark = ()=> themeNow ? themeNow==="dark" : systemDark();
+function applyTheme(pref, repaint){
+  const root = document.documentElement;
+  themeNow = pref;
+  if(pref) root.setAttribute("data-ui-theme", pref); else root.removeAttribute("data-ui-theme");
+  const dark = pref ? pref==="dark" : systemDark();
+  const btn = $("#btnTheme");
+  if(btn){
+    btn.innerHTML = dark ? "&#9728;" : "&#9790;";
+    const label = "Switch to " + (dark ? "light" : "dark") + " mode";
+    btn.title = label; btn.setAttribute("aria-label", label);
+  }
+  if(repaint){ readColors(); drawAll(); }
+}
+applyTheme(themePref(), false);            // set before first paint; boot does the first draw
+$("#btnTheme").addEventListener("click", ()=>{
+  const pref = currentDark() ? "light" : "dark";
+  try{ localStorage.setItem(THEME_KEY, pref); }catch(e){}
+  applyTheme(pref, true);
+});
 try{
   const mq = matchMedia("(prefers-color-scheme: dark)");
-  const onTheme = ()=>{ readColors(); drawAll(); };
+  // only follow the system while no explicit choice has been made
+  const onTheme = ()=>{ if(!themeNow) applyTheme(null, true); };
   if(mq.addEventListener) mq.addEventListener("change", onTheme);
   else if(mq.addListener) mq.addListener(onTheme);          // older WebKit
 }catch(e){}
