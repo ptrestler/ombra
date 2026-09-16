@@ -33,6 +33,11 @@ location.
 That link is a release asset, rebuilt and replaced by CI on every push to
 `main`, so it is always the current build and the URL never changes.
 
+**Open it in a browser, not a file previewer.** iOS Quick Look and the Google
+Drive app will render it and then refuse to let you touch it — they are
+document viewers, and this is an interactive canvas. On a phone, use the hosted
+version instead.
+
 ## What it actually computes
 
 Real building footprints from OpenStreetMap, heights from OSM tags and the

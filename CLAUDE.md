@@ -122,6 +122,16 @@ achieves on the same buildings. The measured table is in `heights.py`. The
 −1.36 m offset next to it is fitted, not assumed — re-measure both if you touch
 either, and never move one by eye.
 
+**The standalone is useless inside a document previewer, and that is not
+fixable.** Opened from iOS Files (Quick Look) it suspends the JavaScript partway
+and sits on the loading screen forever; opened from the Google Drive app it runs
+the whole boot, paints the map correctly, and then hands you a letterboxed
+static card that ignores every tap. Both look like bugs in the page and are not:
+a canvas app needs live JavaScript *and* pointer events, and those viewers give
+you at most one. iOS also will not open a local `.html` in Safari. So the
+standalone is a desktop and offline build; **the hosted artifact is the answer
+for a phone**, because it runs in a real browser.
+
 **Test in WebKit, not just Chromium.** Three separate bugs (the Streams hang, the
 geolocation message, an unclickable close button behind a stacking context) were
 invisible in Chromium. `npx playwright install webkit` if it is missing.
