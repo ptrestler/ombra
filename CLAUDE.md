@@ -100,6 +100,14 @@ pan/zoom; any panel not in that selector list gets its taps *also* treated as ma
 taps. This silently broke the route picker — selecting "Pantheon" set the start
 to whatever street sat under the panel.
 
+**The six named streets in `tests/validate.py` sit in shade's insensitive
+majority.** Scrambling every imputed building height by its full measured error
+changes 5.5 % of the map by more than 10 percentage points and leaves all six
+fixtures identical to the decimal. They guard the physics and the data wiring,
+not the model's sensitivity: a change that wrecks one street in eighteen passes
+them clean. When you touch the model, diff `build/frames.npy` against the old one
+rather than trusting the named streets.
+
 **Test in WebKit, not just Chromium.** Three separate bugs (the Streams hang, the
 geolocation message, an unclickable close button behind a stacking context) were
 invisible in Chromium. `npx playwright install webkit` if it is missing.
@@ -153,9 +161,19 @@ segment's shade over consecutive half-hours is smooth.
 | Relief error vs known heights | **9.8 m** (flat-earth model was 44.9 m) |
 | Buildings with a real OSM height | 2,443 of 14,158 — the other 83 % are estimated from tagged neighbours |
 | Error of those estimates | **RMSE 5.83 m**, MAE 4.19 m, bias −0.05 m — leave-one-out against the 2,443 tagged |
+| Shade's sensitivity to that error | 94.5 % of segment-frames unmoved, city mean shifts 0.15 pp — but 5.5 % move by >10 pp |
 | Walking network | 54,530 links, ~988 km, 97 % one connected component |
 | Median detour index | 1.22 (healthy pedestrian networks are 1.20–1.35) |
 | Sunrise/sunset vs published | within 4 min at both solstices and the equinox |
+
+**Height error does not average out, it concentrates.** Perturbing every imputed
+height by its full measured error (σ = 5.83 m) leaves 94.5 % of the 30.4 M
+segment-frame values *bit-identical* and moves the city-wide mean shade by
+0.15 pp. The 5.5 % that do move, move hard: >1 pp, >5 pp and >10 pp are all the
+same 5.5 % of values, and 3.4 % move by more than 20 pp. Ray blocking is a
+threshold — a few metres either does not change whether the sun is occluded, or
+changes it completely. So the aggregate numbers are robust and individual streets
+are not, which is the opposite of the intuition that 83 % imputed sounds like.
 
 **The elevation data is a surface model, not bare earth** — buildings are baked
 in, so the dense centre reads ~12 m high and hill-to-valley relief is compressed
@@ -175,8 +193,12 @@ patchy — some leafy streets score drier than they feel.
 - **Nasoni and cool refuges.** Rome's public drinking fountains
   (`amenity=drinking_water`), churches and shaded squares, routable as waypoints.
   Cheap, and at 38 °C arguably worth as much as the shade itself.
-- **Better building heights.** 83 % are currently imputed. A European building-height
-  dataset would tighten every number on the map.
+- **Better building heights.** 83 % are imputed, at a measured RMSE of 5.83 m.
+  That does *not* "tighten every number on the map" — the sensitivity test above
+  shows the city mean barely moves. The case is narrower and better: one segment
+  reading in eighteen is wrong by more than 10 percentage points, and nothing in
+  the data tells you which. A European building-height dataset would fix the
+  streets that are badly wrong rather than nudging the ones that are already right.
 - **Wider coverage.** The bbox stops at the historic core; Quartiere Coppedè,
   Testaccio, Ostiense and EUR are just outside.
 - **Multi-stop day planning** — order a day's sights to minimise sun exposure.
