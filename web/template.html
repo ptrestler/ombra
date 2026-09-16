@@ -31,8 +31,8 @@
     --water:#1b2733;
     --green:#1e2a26;
     --ink:#f5efe4;
-    --ink-2:#c4bab0;
-    --muted:#968d84;
+    --ink-2:#efeae2;
+    --muted:#c6bfb5;
     --panel:#1c2330;
     --panel-2:#262f3d;
     --line:#313b4a;
@@ -52,8 +52,8 @@
   --water:#1b2733;
   --green:#1e2a26;
   --ink:#f5efe4;
-  --ink-2:#c4bab0;
-  --muted:#968d84;
+  --ink-2:#efeae2;
+  --muted:#c6bfb5;
   --panel:#1c2330;
   --panel-2:#262f3d;
   --line:#313b4a;
@@ -80,8 +80,12 @@
 :root[data-ui-theme="dark"]{
   color-scheme: dark;
   --ground:#171d28; --bldg:#1d2430; --bldg-line:#28303d; --water:#1b2733;
-  --green:#1e2a26; --ink:#f5efe4; --ink-2:#c4bab0; --muted:#968d84;
+  --green:#1e2a26; --ink:#f5efe4; --ink-2:#efeae2; --muted:#c6bfb5;
   --panel:#1c2330; --panel-2:#262f3d; --line:#313b4a;
+  /* Secondary and muted text are lifted well above their light-mode
+     counterparts. Dark reverses which direction "recede" is: the same grey that
+     reads as quiet on cream reads as unreadable on navy, and the console is
+     almost all secondary text. */
   /* Dark needs its own ramp. These used to be the light palette's exact three,
      which were picked against cream: on a dark ground they sit *below* it in
      lightness, so the red glared and the blue vanished. Lifting them alone was
