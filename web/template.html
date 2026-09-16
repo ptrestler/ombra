@@ -148,10 +148,10 @@ button{cursor:pointer}
 #zoomctl .iconbtn::after{content:"";position:absolute;top:50%;left:50%;
   transform:translate(-50%,-50%);width:44px;height:44px}
 #zoomctl .iconbtn:disabled{opacity:.4;cursor:default}
-/* On a phone the route panel fills the upper map, and the zoom stack ends up
-   buried under it. Desktop lays the panel out bottom-right, where there is no
-   clash, so it only has to give way on narrow screens. */
-#stage.routing #zoomctl{display:none}
+/* The zoom stack used to be hidden on a phone while routing, because the route
+   panel filled the upper map and buried it. The panel is a bounded sheet now,
+   so the top of the map is yours again - and zooming is half of what you want
+   while you are deciding where to walk. */
 #zoomctl .zfit svg{width:15px;height:15px;fill:none;stroke:currentColor;
   stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 
@@ -315,11 +315,33 @@ tr.row:hover td{background:var(--panel-2)}
 #rcard.picking #rpick{display:block}
 /* The picker had two scrollers inside each other - a 190px results list inside a
    card that also scrolled - so on a phone three suggestions were visible and a
-   drag moved whichever one it felt like. While picking, the card claims the map
-   area and the list becomes the only thing that scrolls. */
+   drag moved whichever one it felt like. The list is the only scroller now.
+   It is also a sheet rather than a full-height panel: claiming the whole map
+   answered "where is that?" with a blank wall - you could not see the pin you
+   had just dropped, or check a suggestion against where you are. Bounded to the
+   lower part of the screen, the map stays visible above it, and frameEnds
+   already pads the route into that strip. */
 @media (max-width:859px){
-  #rcard.picking{top:12px;display:flex;flex-direction:column;overflow:hidden;
-    max-height:none}
+  /* 54% of the map area. Measured on a 390x664 phone: it keeps five whole
+     suggestions in the list - the full-height panel it replaces showed six -
+     and hands back 293 px of map, which was zero. */
+  #rcard.picking{display:flex;flex-direction:column;overflow:hidden;
+    max-height:54%}
+  /* Where the room comes from. A phone has about 660 px, and the clock, the
+     scrubber and the date grid are answering a question you are not asking
+     while you choose a place - the map is. They come straight back. */
+  #app.picking #console{display:none}
+  /* Same argument, smaller: the panel this button opens is already on the
+     screen and has its own close button. Those 60 px took the finished route
+     from a 114 px sliver to 159 px of map. */
+  #app.routing #btnRoute{display:none}
+  /* The zoom stack is top-right of the map and the route card rises from the
+     bottom, so the card has to stop below it - it scrolls instead, which it
+     was already built to do. The third button, fit-the-whole-map, is the one
+     the card reached first: while a route is up it would throw away the
+     framing that route just got, so it stands down rather than hide. */
+  #app.routing:not(.picking) #zoomctl .zfit{display:none}
+  #app.routing #rcard:not(.picking){max-height:calc(100% - 150px)}
   #rcard.picking #rpick{flex:1;min-height:0;display:flex;flex-direction:column}
   #rcard.picking #rResults{flex:1;min-height:0;max-height:none}
 }
@@ -389,7 +411,6 @@ tr.row:hover td{background:var(--panel-2)}
     box-shadow:none;background:var(--panel-2);overflow:visible}
   #legend{bottom:16px;left:16px}
   #zoomctl{right:16px;top:60px}
-  #stage.routing #zoomctl{display:flex}
   .desk-note{display:block}
 }
 .desk-note{display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);
@@ -1509,6 +1530,7 @@ const fmtLen = m => {
 const fmtMin = m => Math.max(1,Math.round(m/75))+" min";
 function openRoute(){
   st.routing=true; stage.classList.add("routing");
+  $("#app").classList.add("routing"); resize();   // the map just grew by a button
   $("#btnRoute").setAttribute("aria-pressed","true");
   $("#card").classList.remove("open"); st.hi=null; st.sel=null;
   $("#rcard").classList.add("open");
@@ -1517,10 +1539,11 @@ function openRoute(){
 }
 function closeRoute(){
   st.routing=false; stage.classList.remove("routing");
+  $("#app").classList.remove("routing");
   $("#btnRoute").setAttribute("aria-pressed","false");
-  $("#rcard").classList.remove("open","picking");
+  $("#rcard").classList.remove("open"); setPicking(false);
   st.a=-1; st.b=-1; st.aL=""; st.bL=""; st.pick=null; st.mapPick=null;
-  st.route=null; st.refRoute=null; schedule(false);
+  st.route=null; st.refRoute=null; resize(); schedule(false);
 }
 function renderRoute(){
   const card=$("#rcard");
@@ -1531,7 +1554,7 @@ function renderRoute(){
   $("#rFrom").classList.toggle("unset", !st.aL);
   $("#rTo").classList.toggle("unset", !st.bL);
   if(st.pick) return;
-  card.classList.remove("picking");
+  setPicking(false);
   $("#rFrom").setAttribute("aria-expanded","false");
   $("#rTo").setAttribute("aria-expanded","false");
   if(st.a<0 || st.b<0){
@@ -1568,7 +1591,7 @@ function setEnd(which, node, label){
   const wasMap = st.mapPick;
   if(which==="a"){ st.a=node; st.aL=label; } else { st.b=node; st.bL=label; }
   st.pick=null; st.mapPick=null;
-  recompute(); renderRoute(); frameEnds(); schedule(true);
+  recompute(); renderRoute();
   // Answering "where are you now?" always means the next question is "where are
   // you going?". Ask it instead of making them tap the other end. Only when that
   // end is still blank, so editing one leg of a finished route stays put - and if
@@ -1576,6 +1599,9 @@ function setEnd(which, node, label){
   // them back to the search box.
   const next = (which==="a" && st.b<0) ? "b" : ((which==="b" && st.a<0) ? "a" : null);
   if(next){ openPick(next); if(wasMap) startMapPick(); }
+  // last, because asking the next question resizes the map this has to fit:
+  // the picker takes the lower half and the console goes away underneath it.
+  frameEnds(); schedule(true);
 }
 function startMapPick(){
   st.mapPick=st.pick; $("#pickMap").setAttribute("aria-pressed","true");
@@ -1589,22 +1615,42 @@ function setPoint(x,y){                      // legacy/manual map tap
   setEnd(which, n, labelForNode(n));
 }
 function frameEnds(){
-  if(st.a<0||st.b<0) return;
+  if(st.a<0 && st.b<0) return;
+  const card0=$("#rcard");
+  const strip = () => {                 // middle of the map the picker leaves
+    const over = W < 520 && card0.classList.contains("open");
+    const topPad=74, botPad=(over ? card0.offsetHeight+40 : 30);
+    return [topPad, Math.max(140, Hh-topPad-botPad)];
+  };
+  // One end chosen is worth a look too: put it where you can see it, so the
+  // start you just picked is on the map while you choose the other one.
+  if(st.a<0 || st.b<0){
+    const n = st.a<0 ? st.b : st.a, [topPad, availH] = strip();
+    st.cx = NODEX[n];
+    st.cy = NODEY[n] + (topPad + availH/2 - Hh/2)/st.scale;
+    return;
+  }
   const x0=Math.min(NODEX[st.a],NODEX[st.b]), x1=Math.max(NODEX[st.a],NODEX[st.b]);
   const y0=Math.min(NODEY[st.a],NODEY[st.b]), y1=Math.max(NODEY[st.a],NODEY[st.b]);
-  const card=$("#rcard");
-  const overlays = W < 520 && card.classList.contains("open");   // card sits over the map
-  const topPad=74, sidePad=52, botPad=(overlays ? card.offsetHeight+40 : 30);
-  const availW=Math.max(140, W-sidePad*2), availH=Math.max(140, Hh-topPad-botPad);
+  const [topPad, availH] = strip(), sidePad=52;
+  const availW=Math.max(140, W-sidePad*2);
   st.scale=Math.min(1.2, Math.max(0.05,
     Math.min(availW/Math.max(x1-x0,120), availH/Math.max(y1-y0,120))));
   const targetY = topPad + availH/2;
   st.cx=(x0+x1)/2;
   st.cy=(y0+y1)/2 + (targetY - Hh/2)/st.scale;
 }
+/* The card's picking layout and the console's absence are one state, not two:
+   letting them drift apart is how you get a sheet sized for a screen it is not
+   on. The map is a different size either way, so the canvases follow. */
+function setPicking(on){
+  $("#rcard").classList.toggle("picking", on);
+  $("#app").classList.toggle("picking", on);
+  resize();
+}
 function openPick(which){
   st.pick=which; st.mapPick=null;
-  $("#rcard").classList.add("picking");
+  setPicking(true);
   $("#rFrom").setAttribute("aria-expanded", which==="a");
   $("#rTo").setAttribute("aria-expanded", which==="b");
   $("#pickMap").setAttribute("aria-pressed","false");
@@ -2031,6 +2077,7 @@ try{
                     BUILD, checkFresh,
                     renderRoute, frameIndex, nearestNode, labelForNode,
                     nodeXY:i=>[NODEX[i],NODEY[i]], comp:i=>COMP[i], bigc:()=>BIGC,
+                    screenXY:i=>[sx(NODEX[i]),sy(NODEY[i])],   // where it is on screen now
                     get data(){return D}, get head(){return H}};
     $("#loading").style.display="none";
   }catch(err){

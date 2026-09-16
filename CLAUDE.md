@@ -141,6 +141,17 @@ sits on one in the sidebar and the other on a phone. Note it returns
 `rgb(r,g,b)` while the tokens are hex; mixing the two up is what made the first
 attempt paint every number the same flat ink.
 
+**Opening the picker resizes the map, so frame the map last.** On a phone the
+route picker is a sheet over the lower 54 % and the whole console is hidden
+underneath it (`#app.picking`), which makes the map area grow by about 250 px
+and shrink again when the picking ends. `setEnd` used to call `frameEnds` before
+it asked the next question, so the start pin was centred for a layout that no
+longer existed and landed under the sheet — visible in a screenshot, not visible
+on the phone. Anything that measures `W`/`Hh` or `#rcard.offsetHeight` has to run
+after the class changes, and every class change that moves the console has to
+call `resize()` or the canvas keeps the old size. `setPicking` exists so the card
+and the console cannot disagree about which state they are in.
+
 **A push can be live and still not be on the screen.** Pages serves
 `index.html` with `Cache-Control: max-age=600` and gives no way to change that,
 so for up to ten minutes a browser that already has the page keeps answering

@@ -138,20 +138,46 @@ async function run(engine, label, breakStreams, which) {
     await p.click('#rFrom'); await p.waitForTimeout(200);
     check('empty picker stays open when tapped',
           await p.evaluate(() => document.querySelector('#rcard').classList.contains('picking')));
-    // two nested scrollers fought each other and showed three suggestions
+    // Two nested scrollers fought each other and showed three suggestions. The
+    // fix for that took the whole map instead, which answered "where is that?"
+    // with a blank wall. Both numbers have to hold at once now.
     const pick = await p.evaluate(() => {
       const card = document.querySelector('#rcard'), list = document.querySelector('#rResults');
       const row = document.querySelector('.res').getBoundingClientRect().height;
+      const stage = document.querySelector('#stage').getBoundingClientRect();
+      const c = card.getBoundingClientRect(), z = document.querySelector('#zoomctl');
       return { cardScrolls: card.scrollHeight > card.clientHeight + 1,
-               fits: Math.floor(list.clientHeight / row) };
+               fits: Math.floor(list.clientHeight / row),
+               mapPct: Math.round((c.top - stage.top) / stage.height * 100),
+               consoleGone: getComputedStyle(document.querySelector('#console')).display === 'none',
+               zoom: getComputedStyle(z).display !== 'none' &&
+                     z.getBoundingClientRect().bottom <= c.top + 1 };
     });
     check('the results list is the only thing that scrolls, and shows a useful number',
-          !pick.cardScrolls && pick.fits >= 6, `${pick.fits} suggestions visible`);
+          !pick.cardScrolls && pick.fits >= 5, `${pick.fits} suggestions visible`);
+    check('and the map is still there to look at', pick.mapPct >= 35,
+          `${pick.mapPct}% of the map area`);
+    check('the console steps aside to pay for it', pick.consoleGone);
+    check('the zoom controls stay above the sheet', pick.zoom);
     await p.fill('#rSearch', 'Pantheon'); await p.waitForTimeout(200); await p.click('.res');
     await p.waitForTimeout(400);
     // answering "where are you now?" should ask "where are you going?" by itself
     check('picking the start moves straight on to the destination',
           await p.evaluate(() => window.ombra.st.pick) === 'b');
+    // the point of seeing the map: the end you just chose is on it
+    check('the start you chose is on the visible map', await p.evaluate(() => {
+      const o = window.ombra, [x, y] = o.screenXY(o.st.a);
+      const stage = document.querySelector('#stage').getBoundingClientRect();
+      const top = document.querySelector('#rcard').getBoundingClientRect().top - stage.top;
+      return x > 0 && x < stage.width && y > 74 && y < top;
+    }));
+    // "tap anywhere on the map" was printed over the whole map
+    await p.click('#pickMap'); await p.waitForTimeout(250);
+    check('picking on the map leaves you a map to pick from', await p.evaluate(() => {
+      const stage = document.querySelector('#stage').getBoundingClientRect();
+      const c = document.querySelector('#rcard').getBoundingClientRect();
+      return (c.top - stage.top) / stage.height > 0.5;
+    }));
     await p.click('#rTo'); await p.fill('#rSearch', 'Colosseo'); await p.waitForTimeout(200);
     await p.click('.res'); await p.waitForTimeout(600);
     const km = await p.textContent('#rTitle');
@@ -223,8 +249,15 @@ async function run(engine, label, breakStreams, which) {
     await p.click('#btnTheme'); await p.waitForTimeout(250); const t2 = await gnd();
     check('theme toggle alternates', t0 !== t1 && t1 !== t2 && t0 === t2, `${t0} ${t1} ${t2}`);
     // the phone route panel fills the upper map, so the zoom stack steps aside
-    check('route panel does not bury the zoom controls',
-          await p.evaluate(() => getComputedStyle(document.querySelector('#zoomctl')).display === 'none'));
+    check('the console is back now that the picking is done',
+          await p.evaluate(() => getComputedStyle(document.querySelector('#console')).display !== 'none'));
+    // a control behind a panel is a control you do not have
+    check('nothing in the zoom stack ends up behind the route card',
+          await p.evaluate(() => {
+            const c = document.querySelector('#rcard').getBoundingClientRect();
+            return [...document.querySelectorAll('#zoomctl .iconbtn')]
+              .filter(b => b.offsetParent !== null)
+              .every(b => b.getBoundingClientRect().bottom <= c.top + 1); }));
     check('close button is clickable (z-order)',
           await p.locator('#rClose').isEnabled() &&
           await p.evaluate(() => { const r = document.querySelector('#rClose').getBoundingClientRect();
