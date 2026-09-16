@@ -140,7 +140,14 @@ for unusual installs; leave both unset unless you actually need them.
 
 ## Publishing
 
-Two different builds, and mixing them up wastes an afternoon:
+Three places the page ends up, and mixing them up wastes an afternoon:
+
+- **<https://ptrestler.github.io/ombra/>** — GitHub Pages, deployed by the
+  `deploy` job from the same build the tests ran against. Nothing is committed
+  for it. This is the link to send someone: a top-level HTTPS document, so it is
+  the only hosted copy where **geolocation works**.
+
+Two builds feed all of this:
 
 - **`dist/ombra-roma.html`** — the standalone. A complete document, works offline,
   from disk, anywhere. This is what you send people and what the tests load.

@@ -23,6 +23,12 @@ open dist/ombra-roma.html
 `make distclean` also drops the cached downloads — only do that if you mean it,
 as re-fetching from public Overpass mirrors takes about an hour.
 
+## Open it
+
+**<https://ptrestler.github.io/ombra/>** — the live page, rebuilt and
+redeployed by CI on every push to `main`. Works on a phone, and because it is a
+top-level page rather than an embedded frame it can use your location.
+
 ## Just give me the file
 
 **[Download the page](https://github.com/ptrestler/ombra/releases/download/build/ombra-roma.html)**
@@ -35,8 +41,8 @@ That link is a release asset, rebuilt and replaced by CI on every push to
 
 **Open it in a browser, not a file previewer.** iOS Quick Look and the Google
 Drive app will render it and then refuse to let you touch it — they are
-document viewers, and this is an interactive canvas. On a phone, use the hosted
-version instead.
+document viewers, and this is an interactive canvas. On a phone, use the link
+above instead.
 
 ## What it actually computes
 

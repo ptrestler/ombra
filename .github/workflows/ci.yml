@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: write          # the release step replaces the downloadable build
+  pages: write             # ...and the deploy job publishes the site
+  id-token: write
 
 jobs:
   test:
@@ -68,3 +70,30 @@ jobs:
         run: |
           gh release view build >/dev/null 2>&1 || gh release create build             --title "Latest build"             --notes "The current standalone page, rebuilt on every push to main. One self-contained file: download it and open it in any browser. Works offline, and unlike the hosted artifact it can use your location."
           gh release upload build dist/ombra-roma.html --clobber
+
+  # The page on a URL anyone can open. This is the copy to send people: it is a
+  # top-level HTTPS document rather than a cross-origin iframe, so unlike the
+  # hosted artifact it can use the visitor's location. Deployed from the build,
+  # never committed, so it costs the repository nothing.
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ombra-roma-html
+          path: site
+
+      # Pages serves index.html at the directory root; the build has one name.
+      - run: mv site/ombra-roma.html site/index.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
