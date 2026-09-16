@@ -160,7 +160,7 @@ the newest version; signed out — which is what a fresh browser is — the same
 serves the pinned one, frame version and all. Check which you are looking at
 before concluding the publish did not land:
 
-    document.querySelector('iframe').src     // .../\_f/<version>/...
+    document.querySelector('iframe').src     // .../_f/<version>/...
 
 The share URL is the same artifact under a shorter slug:
 `https://claude.ai/artifact/LsQ9MwiwY46nuxBJGoDkuN`. Either form works as `url`
