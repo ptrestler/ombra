@@ -26,8 +26,8 @@
   :root:not([data-theme="light"]){
     color-scheme: dark;
     --ground:#171d28;
-    --bldg:#232b38;
-    --bldg-line:#2f3846;
+    --bldg:#1d2430;
+    --bldg-line:#28303d;
     --water:#1b2733;
     --green:#1e2a26;
     --ink:#f5efe4;
@@ -36,9 +36,9 @@
     --panel:#1c2330;
     --panel-2:#262f3d;
     --line:#313b4a;
-    --shade:#84b4d8;
-    --sun:#df8490;
-    --mid:#a892cd;
+    --shade:#63bcf2;
+    --sun:#fb7d8b;
+    --mid:#b78ae4;
     --accent:#3f93d6;
     --accent-ink:#0d1218;
     --shadow:0 2px 6px rgba(0,0,0,.4),0 14px 40px rgba(0,0,0,.5);
@@ -47,8 +47,8 @@
 :root[data-theme="dark"]{
   color-scheme: dark;
   --ground:#171d28;
-  --bldg:#232b38;
-  --bldg-line:#2f3846;
+  --bldg:#1d2430;
+  --bldg-line:#28303d;
   --water:#1b2733;
   --green:#1e2a26;
   --ink:#f5efe4;
@@ -57,9 +57,9 @@
   --panel:#1c2330;
   --panel-2:#262f3d;
   --line:#313b4a;
-  --shade:#84b4d8;
-  --sun:#df8490;
-  --mid:#a892cd;
+  --shade:#63bcf2;
+  --sun:#fb7d8b;
+  --mid:#b78ae4;
   --accent:#3f93d6;
   --accent-ink:#0d1218;
   --shadow:0 2px 6px rgba(0,0,0,.4),0 14px 40px rgba(0,0,0,.5);
@@ -79,14 +79,16 @@
 }
 :root[data-ui-theme="dark"]{
   color-scheme: dark;
-  --ground:#171d28; --bldg:#232b38; --bldg-line:#2f3846; --water:#1b2733;
+  --ground:#171d28; --bldg:#1d2430; --bldg-line:#28303d; --water:#1b2733;
   --green:#1e2a26; --ink:#f5efe4; --ink-2:#c4bab0; --muted:#968d84;
   --panel:#1c2330; --panel-2:#262f3d; --line:#313b4a;
   /* Dark needs its own ramp. These used to be the light palette's exact three,
      which were picked against cream: on a dark ground they sit *below* it in
-     lightness, so the red glared and the blue vanished. Lifted and desaturated,
-     on a navy rather than a near-black ground. */
-  --shade:#84b4d8; --sun:#df8490; --mid:#a892cd;
+     lightness, so the red glared and the blue vanished. Lifting them alone was
+     not enough either - desaturated on navy, sun and shade came out at nearly
+     the same lightness and the map went muddy at street zoom. These are lifted
+     *and* saturated, over buildings dark enough to stay out of their way. */
+  --shade:#63bcf2; --sun:#fb7d8b; --mid:#b78ae4;
   --accent:#3f93d6; --accent-ink:#0d1218;
   --shadow:0 2px 6px rgba(0,0,0,.4),0 14px 40px rgba(0,0,0,.5);
 }
