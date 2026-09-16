@@ -9,3 +9,7 @@ dist/
 node_modules/
 __pycache__/
 *.pyc
+
+# Claude Code's local permission settings: machine-specific absolute paths,
+# not project source.
+.claude/
