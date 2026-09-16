@@ -124,8 +124,35 @@ async function run(engine, label, breakStreams, which) {
   await browser.close();
 }
 
+// The route panel is a floating card on a phone and a sidebar section on a
+// desktop, moved between the two by placeRcard. Getting that wrong once left the
+// close button anchored to the sidebar instead of the card.
+async function desktopLayout(){
+  const browser = await chromium.launch(EXE.chromium ? { executablePath: EXE.chromium } : {});
+  const p = await browser.newPage({ viewport: { width: 1280, height: 860 } });
+  const errs = [];
+  p.on('pageerror', e => errs.push(e.message));
+  await p.route('**fonts.googleapis.com**', r => r.abort());
+  console.log('');
+  console.log('Chromium, desktop width');
+  await p.goto(url, { waitUntil: 'domcontentloaded' });
+  await p.waitForFunction(() => document.querySelector('#loading').style.display === 'none',
+                          { timeout: 45000 });
+  await p.click('#btnRoute'); await p.waitForTimeout(400);
+  check('route panel sits in the sidebar, not over the map',
+        await p.evaluate(() => document.querySelector('#rcard').parentNode.id) === 'console');
+  check('its close button stays on the card',
+        await p.evaluate(() => { const c = document.querySelector('#rcard').getBoundingClientRect();
+          const x = document.querySelector('#rClose').getBoundingClientRect();
+          return x.top >= c.top - 1 && x.right <= c.right + 1; }));
+  check('the zoom controls stay reachable', await p.locator('#btnZin').isVisible());
+  check('no console or page errors', errs.length === 0, errs.slice(0, 2).join(' | '));
+  await browser.close();
+}
+
 await run(chromium, 'Chromium', false, 'chromium');
 await run(webkit, 'WebKit', false, 'webkit');
 await run(webkit, 'WebKit with the Streams API broken (iOS Quick Look)', true, 'webkit');
+await desktopLayout();
 console.log(`\n${failures ? failures + ' CHECKS FAILED' : 'all checks passed'}`);
 process.exit(failures ? 1 : 0);

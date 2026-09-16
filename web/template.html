@@ -318,8 +318,11 @@ tr.row:hover td{background:var(--panel-2)}
     overflow:auto;padding:16px 18px}
   .clock{font-size:38px}
   #sheet{left:auto;width:388px;border-left:1px solid var(--line)}
-  #card,#rcard{left:auto;width:360px;right:16px;bottom:16px}
-  #rcard{max-height:calc(100% - 32px)}
+  #card{left:auto;width:360px;right:16px;bottom:16px;max-height:calc(100% - 32px)}
+  /* The route panel moves into the sidebar on desktop (see placeRcard) - there
+     is empty space under the buttons, and the map needs all of itself. */
+  #rcard{position:relative;left:auto;right:auto;bottom:auto;width:auto;max-height:none;margin-top:10px;
+    box-shadow:none;background:var(--panel-2);overflow:visible}
   #legend{bottom:16px;left:16px}
   #zoomctl{right:16px;top:60px}
   #stage.routing #zoomctl{display:flex}
@@ -1657,6 +1660,18 @@ addEventListener("keydown", e=>{
   else return;
   e.preventDefault();
 });
+/* The route panel is a floating card over the map on a phone, where there is
+   nowhere else for it, and a section of the sidebar on a desktop, where the map
+   is the scarce thing and the sidebar has room going spare. CSS cannot move a
+   box between containers, so this does. */
+const DESK = matchMedia("(min-width:860px)");
+function placeRcard(){
+  const rc=$("#rcard"), home = DESK.matches ? $("#console") : stage;
+  if(rc.parentNode !== home) home.appendChild(rc);
+  if(st.route) renderRoute();            // the strip canvas is sized from its box
+}
+placeRcard();
+try{ DESK.addEventListener("change", placeRcard); }catch(e){ DESK.addListener(placeRcard); }
 $("#btnRoute").addEventListener("click", ()=> st.routing ? closeRoute() : openRoute());
 $("#rClose").addEventListener("click", closeRoute);
 // The card opens with the A picker already showing, so a plain toggle made the
