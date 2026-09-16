@@ -327,20 +327,17 @@ tr.row:hover td{background:var(--panel-2)}
      and hands back 293 px of map, which was zero. */
   #rcard.picking{display:flex;flex-direction:column;overflow:hidden;
     max-height:54%}
-  /* Where the room comes from. A phone has about 660 px, and the clock, the
-     scrubber and the date grid are answering a question you are not asking
-     while you choose a place - the map is. They come straight back. */
-  #app.picking #console{display:none}
-  /* Same argument, smaller: the panel this button opens is already on the
-     screen and has its own close button. Those 60 px took the finished route
-     from a 114 px sliver to 159 px of map. */
-  #app.routing #btnRoute{display:none}
-  /* The zoom stack is top-right of the map and the route card rises from the
-     bottom, so the card has to stop below it - it scrolls instead, which it
-     was already built to do. The third button, fit-the-whole-map, is the one
-     the card reached first: while a route is up it would throw away the
-     framing that route just got, so it stands down rather than hide. */
-  #app.routing:not(.picking) #zoomctl .zfit{display:none}
+  /* Where the room comes from. A phone has about 660 px, and the console is
+     answering questions you are not asking once the route panel is up. While
+     you choose a place, the map is the question. Once a route is drawn, the
+     card has its own scrubber - and it is the better one, because it plots
+     that route's shade through the day rather than the whole city's. The date
+     grid goes with it; it is folded away by default anyway. All of it comes
+     straight back when the panel closes. */
+  #app.routing #console{display:none}
+  /* The zoom stack is top-right of the map and the card rises from the bottom,
+     so the card has to stop below it - it scrolls instead, which it was
+     already built to do. */
   #app.routing #rcard:not(.picking){max-height:calc(100% - 150px)}
   #rcard.picking #rpick{flex:1;min-height:0;display:flex;flex-direction:column}
   #rcard.picking #rResults{flex:1;min-height:0;max-height:none}
@@ -371,7 +368,7 @@ tr.row:hover td{background:var(--panel-2)}
   font-variant-numeric:tabular-nums}
 .rcmp b{color:var(--ink-2);font-weight:600}
 .rcmp .win{color:var(--shade);font-weight:700}
-#rstrip{width:100%;height:56px;display:block;margin-top:9px}
+#rstrip{width:100%;height:56px;display:block;margin-top:9px;touch-action:none;cursor:pointer}
 #rcard.empty .rmodes,#rcard.empty .rcmp,#rcard.empty #rstrip,
 #rcard.empty #rstriplab,#rcard.empty #rBig{display:none}
 .cardtop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-right:20px}
@@ -381,7 +378,7 @@ tr.row:hover td{background:var(--panel-2)}
 .big{font-family:"Bodoni Moda",Georgia,serif;font-size:31px;font-weight:600;line-height:1;
   font-variant-numeric:tabular-nums;white-space:nowrap}
 .big small{font-size:13px;font-weight:400;color:var(--muted)}
-#strip{width:100%;height:62px;display:block;margin-top:9px}
+#strip{width:100%;height:62px;display:block;margin-top:9px;touch-action:none;cursor:pointer}
 .striplab{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);
   font-variant-numeric:tabular-nums;margin-top:1px}
 .close{border:none;background:transparent;color:var(--muted);font-size:19px;line-height:1;
@@ -1352,13 +1349,26 @@ function drawStrip(sel, pairs, h){
   }
   cv._vals=vals; cv._X=X;
 }
+/* The strip looks like a control and used to be a hover readout, which is a
+   difference a phone cannot even express. It matters now: with the route panel
+   up the console is hidden, so this is the only way left to change the hour -
+   and it is the better one, because it plots this route's shade through the day
+   rather than the whole city's. Tap or drag sets the time. A mouse that is only
+   passing over still just previews. */
 function bindStrip(sel, out, back){
   const cv=$(sel);
+  const slotAt = e => { const r=cv.getBoundingClientRect();
+    return Math.round(Math.max(0,Math.min(31,(e.clientX-r.left-3)/(r.width-6)*31))); };
+  const goTo = t => { st.ti=t; stop(); updateReadouts(); schedule(false); };
   cv.addEventListener("pointermove", e=>{
     const v=cv._vals; if(!v) return;
-    const r=cv.getBoundingClientRect();
-    const t=Math.round(Math.max(0,Math.min(31,(e.clientX-r.left-3)/(r.width-6)*31)));
+    const t=slotAt(e);
+    if(cv.hasPointerCapture(e.pointerId)){ goTo(t); return; }   // dragging, not passing
     $(out).textContent = fmtTime(t)+" \u00b7 "+Math.round(v[t])+"% shade";
+  });
+  cv.addEventListener("pointerdown", e=>{
+    if(!cv._vals) return;
+    cv.setPointerCapture(e.pointerId); goTo(slotAt(e)); e.preventDefault();
   });
   cv.addEventListener("pointerleave", back);
 }
@@ -1640,12 +1650,11 @@ function frameEnds(){
   st.cx=(x0+x1)/2;
   st.cy=(y0+y1)/2 + (targetY - Hh/2)/st.scale;
 }
-/* The card's picking layout and the console's absence are one state, not two:
-   letting them drift apart is how you get a sheet sized for a screen it is not
-   on. The map is a different size either way, so the canvases follow. */
+/* The picking layout changes the card's height, which changes how much map is
+   left, so the canvases have to follow it. Everything that turns picking on or
+   off goes through here for that reason. */
 function setPicking(on){
   $("#rcard").classList.toggle("picking", on);
-  $("#app").classList.toggle("picking", on);
   resize();
 }
 function openPick(which){

@@ -184,6 +184,17 @@ async function run(engine, label, breakStreams, which) {
     check('routes Pantheon to Colosseo', /km/.test(km), km);
     check('shows the shortest-route comparison',
           /Shortest way/.test(await p.textContent('#rCompare')));
+    // With the console hidden behind the route panel this strip is the only
+    // time control a phone has left, and it is the better one - it plots this
+    // route's shade rather than the city's. If it stops scrubbing, the hour is
+    // stuck.
+    const wasTi = await p.evaluate(() => window.ombra.st.ti);
+    const sb = await p.locator('#rstrip').boundingBox();
+    await p.mouse.click(sb.x + sb.width * 0.15, sb.y + sb.height / 2);
+    await p.waitForTimeout(300);
+    const nowTi = await p.evaluate(() => window.ombra.st.ti);
+    check('the route strip sets the hour, now that it is the only thing that can',
+          nowTi !== wasTi, `slot ${wasTi} -> ${nowTi}`);
     // ...and after sunset there is nothing to trade, which it should say rather
     // than quietly offering a detour that buys no shade
     await setClock(8, 15, 28);                       // 20:00, 15 September
@@ -249,8 +260,14 @@ async function run(engine, label, breakStreams, which) {
     await p.click('#btnTheme'); await p.waitForTimeout(250); const t2 = await gnd();
     check('theme toggle alternates', t0 !== t1 && t1 !== t2 && t0 === t2, `${t0} ${t1} ${t2}`);
     // the phone route panel fills the upper map, so the zoom stack steps aside
-    check('the console is back now that the picking is done',
-          await p.evaluate(() => getComputedStyle(document.querySelector('#console')).display !== 'none'));
+    // the route card carries its own scrubber, and it is about this route
+    check('the console stays out of the way while the route is up',
+          await p.evaluate(() => getComputedStyle(document.querySelector('#console')).display === 'none'));
+    const band = await p.evaluate(() => {
+      const s = document.querySelector('#stage').getBoundingClientRect();
+      const c = document.querySelector('#rcard').getBoundingClientRect();
+      return Math.round((c.top - s.top) / s.height * 100); });
+    check('which leaves the route itself most of the screen', band >= 50, `${band}% map`);
     // a control behind a panel is a control you do not have
     check('nothing in the zoom stack ends up behind the route card',
           await p.evaluate(() => {
@@ -265,6 +282,11 @@ async function run(engine, label, breakStreams, which) {
     // no version.txt to fetch here, and a downloaded copy must never nag
     check('no stale-build prompt from a file:// copy',
           await p.evaluate(() => document.querySelector('#fresh').hidden));
+    await p.click('#rClose'); await p.waitForTimeout(350);
+    check('closing the route hands the console back',
+          await p.evaluate(() =>
+            getComputedStyle(document.querySelector('#console')).display !== 'none' &&
+            !document.querySelector('#rcard').classList.contains('open')));
   }
   check('no console or page errors', errs.length === 0, errs.slice(0, 2).join(' | '));
   await browser.close();
