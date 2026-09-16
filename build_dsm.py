@@ -1,9 +1,9 @@
 import json, glob, math, numpy as np, os
-from paths import osm, dem, build, web, dist
+from paths import osm, dem, eub, build, web, dist
 from PIL import Image, ImageDraw
 from scipy.spatial import cKDTree
 from geo import to_xy
-from heights import building_height
+from heights import building_height, cadastre_heights
 
 RES=2.0
 S,W,N,E = 41.878, 12.4500, 41.9150, 12.5100
@@ -37,8 +37,15 @@ for fn in sorted(glob.glob(osm("tiles/bld_*.json"))):
 
 known=[b for b in blds if b["src"] in ("tag","levels")]
 unk  =[b for b in blds if b["src"]=="default"]
-print("buildings",len(blds),"known",len(known),"imputed",len(unk))
+print("buildings",len(blds),"known",len(known),"untagged",len(unk))
+ncad=0
 if known:
+    # An untagged building gets a real cadastre height if one sits close enough,
+    # and an interpolated one otherwise. OSM tags always win over both: they are
+    # the yardstick everything else was measured against. See heights.py.
+    CH = cadastre_heights(eub("rome.csv"),
+                          [b["c"][0] for b in unk], [b["c"][1] for b in unk])
+
     KX,KY = to_xy([b["c"][0] for b in known],[b["c"][1] for b in known])
     tree = cKDTree(np.c_[KX,KY]); KH=np.array([b["h"] for b in known])
     gmed=float(np.median(KH))
@@ -46,6 +53,9 @@ if known:
     K=15
     d,i = tree.query(np.c_[UX,UY], k=K, distance_upper_bound=500.0)
     for j,b in enumerate(unk):
+        if np.isfinite(CH[j]):
+            b["h"]=float(CH[j]); b["src"]="cadastre"; ncad+=1
+            continue
         idx=i[j]; dd=d[j]; ok=np.isfinite(dd)
         # Inverse-distance weighted mean, not a median. Measured by leave-one-out
         # against the 2,443 tagged heights: RMSE 6.47 m -> 5.83 m, and it removes a
@@ -57,8 +67,12 @@ if known:
         else:
             est = gmed
         b["h"]=float(np.clip(est, 7.0, 34.0))
-    hh=np.array([b["h"] for b in unk])
-    print("imputed heights: median",round(float(np.median(hh)),1),"p10",round(float(np.percentile(hh,10)),1),"p90",round(float(np.percentile(hh,90)),1))
+    print(f"  cadastre {ncad} ({100*ncad/len(unk):.0f}% of untagged)   interpolated {len(unk)-ncad}")
+    for lbl,sel in (("cadastre",  [b for b in unk if b["src"]=="cadastre"]),
+                    ("interpolated",[b for b in unk if b["src"]=="default"]),
+                    ("all untagged", unk)):
+        hh=np.array([b["h"] for b in sel])
+        print(f"  {lbl:<13} median {np.median(hh):5.1f}  p10 {np.percentile(hh,10):5.1f}  p90 {np.percentile(hh,90):5.1f}")
 
 img=Image.new("I;16",(NX,NY),0); d=ImageDraw.Draw(img)
 for b in blds:
@@ -97,5 +111,5 @@ canopy=np.array(cim,dtype=np.uint16)
 dsm=np.maximum(bmask,canopy)
 np.save(build("dsm.npy"),dsm); np.save(build("canopy.npy"),canopy); np.save(build("bmask.npy"),bmask)
 json.dump({"x0":float(x0),"y0":float(y0),"x1":float(x1),"y1":float(y1),"NX":NX,"NY":NY,"RES":RES,
-           "S":S,"W":W,"N":N,"E":E,"nbld":len(blds),"nknown":len(known)},open(build("grid.json"),"w"))
+           "S":S,"W":W,"N":N,"E":E,"nbld":len(blds),"nknown":len(known),"ncadastre":ncad},open(build("grid.json"),"w"))
 print("dsm max",dsm.max()/10,"coverage",round(float((dsm>0).mean()),3))

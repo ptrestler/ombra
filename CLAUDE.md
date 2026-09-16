@@ -19,6 +19,8 @@ make clean      # drop derived files, keep downloads
 ```
 
 `make` rebuilds `dist/ombra-roma.html`. The expensive stage is `shade.py` (~7 min).
+`make fetch` is the only target that needs the network, and the only one that needs
+`duckdb` (for `fetch_eubucco.py`); everything it downloads is committed under `data/`.
 
 ## Pipeline
 
@@ -28,6 +30,7 @@ so scripts run from any directory.
 | stage | what it does | out |
 |---|---|---|
 | `fetch_osm.py` | streets, buildings, water, greenery, trees, named places | `data/osm/` |
+| `fetch_eubucco.py` | cadastre building heights for the bbox, from EUBUCCO | `data/eubucco/` |
 | `terrain.py` | elevation tiles → 10 m grid, map bbox + 2 km margin | `build/terr.npy` |
 | `ground.py` | picks terrain smoothing by scoring relief error | `build/ground.npy` |
 | `build_dsm.py` | 2 m raster of building + canopy height above ground | `build/dsm.npy` |
@@ -39,7 +42,8 @@ so scripts run from any directory.
 | `build_artifact.py` | template + payload, no shell — for publishing | `build/artifact.html` |
 
 Supporting modules: `geo.py` (local metre projection), `solar.py` (NOAA solar
-position), `heights.py` (OSM height tags → metres), `streets.py` (segmentation).
+position), `heights.py` (OSM height tags → metres, plus the cadastre lookup),
+`streets.py` (segmentation).
 
 ## How the shade model works
 
@@ -101,12 +105,22 @@ taps. This silently broke the route picker — selecting "Pantheon" set the star
 to whatever street sat under the panel.
 
 **The six named streets in `tests/validate.py` sit in shade's insensitive
-majority.** Scrambling every imputed building height by its full measured error
-changes 5.5 % of the map by more than 10 percentage points and leaves all six
-fixtures identical to the decimal. They guard the physics and the data wiring,
-not the model's sensitivity: a change that wrecks one street in eighteen passes
-them clean. When you touch the model, diff `build/frames.npy` against the old one
-rather than trusting the named streets.
+majority.** Scrambling every non-tagged building height by its full measured
+error changes 5.9 % of the map by more than 10 percentage points, and moves the
+six fixtures by at most 2 pp — all six still pass. They guard the physics and
+the data wiring, not the model's sensitivity: a change that wrecks one street in
+seventeen passes them clean. When you touch the model, diff `build/frames.npy`
+against the old one rather than trusting the named streets.
+
+**The cadastre match radius is load-bearing.** `heights.py` accepts a EUBUCCO
+height only when its centroid lands within 8 m of ours. That is not a rounding
+tolerance, it is where the data stops being better than the interpolation it
+replaces. EUBUCCO subdivides blocks more finely than OSM does, so past about
+10 m the nearest centroid is usually the building next door: widening to 12 m
+lifts coverage from 61 % to 74 % and pushes the error *above* what interpolation
+achieves on the same buildings. The measured table is in `heights.py`. The
+−1.36 m offset next to it is fitted, not assumed — re-measure both if you touch
+either, and never move one by eye.
 
 **Test in WebKit, not just Chromium.** Three separate bugs (the Streams hang, the
 geolocation message, an unclickable close button behind a stacking context) were
@@ -159,21 +173,36 @@ segment's shade over consecutive half-hours is smooth.
 | | |
 |---|---|
 | Relief error vs known heights | **9.8 m** (flat-earth model was 44.9 m) |
-| Buildings with a real OSM height | 2,443 of 14,158 — the other 83 % are estimated from tagged neighbours |
-| Error of those estimates | **RMSE 5.83 m**, MAE 4.19 m, bias −0.05 m — leave-one-out against the 2,443 tagged |
-| Shade's sensitivity to that error | 94.5 % of segment-frames unmoved, city mean shifts 0.15 pp — but 5.5 % move by >10 pp |
+| Buildings with a real OSM height | 2,443 of 14,158 |
+| …matched to the Lazio cadastre instead | 7,140 more — 61 % of the untagged |
+| …still interpolated from neighbours | 4,575, the ones neither source reaches |
+| Error of the cadastre heights | **RMSE 5.01 m**, MAE 3.53 m, bias +0.00 m — against the OSM tags, on the 1,620 buildings that have both. Interpolation scored 5.50 m on those same buildings |
+| Error of the interpolation that is left | RMSE 6.42 m, MAE 4.40 m (n = 823). The buildings the cadastre misses are the harder ones, so this is worse than the 5.83 m the old build averaged |
+| Error of every non-tagged height | **RMSE 5.53 m**, MAE 3.83 m, bias +0.04 m — was 5.83 m / 4.19 m |
+| Shade's sensitivity to that error | 94.1 % of segment-frames unmoved, city mean shifts 0.36 pp — but 5.9 % move by >10 pp |
 | Walking network | 54,530 links, ~988 km, 97 % one connected component |
 | Median detour index | 1.22 (healthy pedestrian networks are 1.20–1.35) |
 | Sunrise/sunset vs published | within 4 min at both solstices and the equinox |
 
-**Height error does not average out, it concentrates.** Perturbing every imputed
-height by its full measured error (σ = 5.83 m) leaves 94.5 % of the 30.4 M
-segment-frame values *bit-identical* and moves the city-wide mean shade by
-0.15 pp. The 5.5 % that do move, move hard: >1 pp, >5 pp and >10 pp are all the
-same 5.5 % of values, and 3.4 % move by more than 20 pp. Ray blocking is a
-threshold — a few metres either does not change whether the sun is occluded, or
-changes it completely. So the aggregate numbers are robust and individual streets
-are not, which is the opposite of the intuition that 83 % imputed sounds like.
+**Height error does not average out, it concentrates.** Perturbing every
+non-tagged height by its own measured error (σ = 5.01 m for the cadastre ones,
+6.42 m for the interpolated) leaves 94.1 % of the 30.4 M segment-frame values
+*bit-identical* and moves the city-wide mean shade by 0.36 pp. The 5.9 % that do
+move, move hard: >1 pp, >5 pp and >10 pp are all the same 5.9 % of values, and
+3.7 % move by more than 20 pp. Ray blocking is a threshold — a few metres either
+does not change whether the sun is occluded, or changes it completely. So the
+aggregate numbers are robust and individual streets are not, which is the
+opposite of the intuition that "83 % estimated" suggests.
+
+**Adding the cadastre did not change that shape, and was not expected to.**
+Before it, the same test moved 5.5 % of values; after, 5.9 %. Fewer heights are
+now guessed and the guesses that remain are better measured, but the fraction of
+the map that sits near a blocking threshold is a property of Rome's geometry,
+not of the height data. Switching the cadastre on moved 5.0 % of segment-frames
+and the city mean by −0.80 pp — the same order as the noise above, so **the diff
+alone does not show the map got better.** The case for it is the measurement:
+5.01 m against 5.50 m on the same 1,620 buildings, and a height that was
+surveyed rather than inferred from the neighbours.
 
 **The elevation data is a surface model, not bare earth** — buildings are baked
 in, so the dense centre reads ~12 m high and hill-to-valley relief is compressed
@@ -193,12 +222,12 @@ patchy — some leafy streets score drier than they feel.
 - **Nasoni and cool refuges.** Rome's public drinking fountains
   (`amenity=drinking_water`), churches and shaded squares, routable as waypoints.
   Cheap, and at 38 °C arguably worth as much as the shade itself.
-- **Better building heights.** 83 % are imputed, at a measured RMSE of 5.83 m.
-  That does *not* "tighten every number on the map" — the sensitivity test above
-  shows the city mean barely moves. The case is narrower and better: one segment
-  reading in eighteen is wrong by more than 10 percentage points, and nothing in
-  the data tells you which. A European building-height dataset would fix the
-  streets that are badly wrong rather than nudging the ones that are already right.
+- **The 4,575 heights still guessed.** The cadastre reaches 61 % of the untagged
+  buildings; the rest have no EUBUCCO centroid within 8 m, usually because OSM
+  and the cadastre disagree about where one building stops and the next starts.
+  Matching on footprint overlap instead of centroid distance would reach most of
+  them, and it is a geometry problem rather than a data problem — the data is
+  already downloaded. This is the largest remaining gain in the model.
 - **Wider coverage.** The bbox stops at the historic core; Quartiere Coppedè,
   Testaccio, Ostiense and EUR are just outside.
 - **Multi-stop day planning** — order a day's sights to minimise sun exposure.

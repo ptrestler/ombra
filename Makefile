@@ -6,14 +6,15 @@ PY := python3
 
 all: web
 
-## fetch -- OpenStreetMap + elevation tiles into data/ (cached; safe to re-run)
+## fetch -- OpenStreetMap, elevation and cadastre data into data/ (cached; safe to re-run)
 fetch:
 	$(PY) fetch_osm.py
 	$(PY) terrain.py
+	$(PY) fetch_eubucco.py
 
 ## rasters -- 2 m building/canopy grid, 10 m terrain grid
 rasters: build/dsm.npy build/ground.npy
-build/dsm.npy: build_dsm.py heights.py geo.py
+build/dsm.npy: build_dsm.py heights.py geo.py data/eubucco/rome.csv
 	$(PY) build_dsm.py
 build/ground.npy: build/terr.npy ground.py
 	$(PY) ground.py
@@ -46,4 +47,4 @@ test:
 clean:                      ## derived files only; keeps the downloaded data
 	rm -rf build dist
 distclean: clean            ## also drops the cached downloads (slow to refetch)
-	rm -rf data/osm/tiles data/osm/extra_*.json data/dem
+	rm -rf data/osm/tiles data/osm/extra_*.json data/dem data/eubucco

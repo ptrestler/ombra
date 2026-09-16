@@ -955,14 +955,16 @@ rather than just take it on faith.</li>
 <h3>Where the data comes from</h3>
 <ul>
 <li><b>__NBLD__ buildings</b> from OpenStreetMap. <b>__NKNOWN__</b> carry a real height or
-floor count; the rest are estimated from the median of their tagged neighbours, which in
-this part of Rome lands around five floors.</li>
+floor count. Another <b>__NCAD__</b> are matched to the Italian cadastre, via EUBUCCO \u2014
+a measured height rather than a guess. The remaining <b>__NIMP__</b> are interpolated from
+their tagged neighbours, weighted by distance.</li>
 <li><b>4,800 mapped trees</b>, 215 tree rows and the wooded parts of parks, modelled as
 9\u201311 m canopy. Tree mapping is patchy, so some leafy streets score drier than they feel.</li>
 <li><b>Terrain</b> from the AWS Open Data terrain tiles (SRTM-derived, ~30&nbsp;m),
 sampled onto a 10&nbsp;m grid covering the map plus a 2&nbsp;km margin so hills outside
 the frame still cast into it.</li>
-<li>Data \u00a9 OpenStreetMap contributors, ODbL. Elevation data courtesy of the
+<li>Data \u00a9 OpenStreetMap contributors, ODbL. Building heights also from
+EUBUCCO v0.2 (ODbL), derived from the Lazio cadastre. Elevation data courtesy of the
 USGS/NASA SRTM programme via AWS Open Data.</li>
 </ul>
 
@@ -1013,7 +1015,10 @@ function openSheet(tab){
   if(tab==="how") $("#sheetBody").innerHTML = HOWTO
      .replace("__NEDGE__", H.nedge ? H.nedge.toLocaleString("en") : "54,530")
      .replace("__NBLD__", H.nbld ? H.nbld.toLocaleString("en") : "14,158")
-     .replace("__NKNOWN__", H.nknown ? H.nknown.toLocaleString("en") : "2,443");
+     .replace("__NKNOWN__", H.nknown ? H.nknown.toLocaleString("en") : "2,443")
+     .replace("__NCAD__", H.ncad ? H.ncad.toLocaleString("en") : "7,140")
+     .replace("__NIMP__", (H.nbld && H.nknown && H.ncad)
+        ? (H.nbld - H.nknown - H.ncad).toLocaleString("en") : "4,575");
   else renderList();
   $("#sheetBody").scrollTop=0;
 }

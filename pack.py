@@ -128,6 +128,7 @@ pl=[[p["n"], CATS.index(p["c"]),
      int(round((to_xy(p["lon"],p["lat"])[1]-OY)/QS)), p["s"]] for p in PP["places"]]
 print("places packed:", len(pl), "cats", CATS)
 head=dict(sections=hdr, nbld=gj.get("nbld"), nknown=gj.get("nknown"),
+          ncad=gj.get("ncadastre"),
           nnode=NNODE, nedge=NEDGE, pl=pl, cats=CATS, top=PP["top"], qs=QS, ox=OX, oy=OY, nseg=len(segs), nframe=T.shape[1],
           kinds=KINDS, names=names, frames=meta,
           bbox=dict(x0=float(bx0),y0=float(by0),x1=float(bx1),y1=float(by1)),

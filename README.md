@@ -3,7 +3,7 @@
 A street-by-street shade map of central Rome, and walking routes that prefer the
 shady side. One self-contained HTML file — no server, works offline.
 
-Blue is shaded, orange is open sun. Scrub the time and date; tap any street to
+Blue is shaded, red is open sun. Scrub the time and date; tap any street to
 see its whole day; give it two endpoints and it will trade a short detour for a
 lot less sun.
 
@@ -25,12 +25,12 @@ as re-fetching from public Overpass mirrors takes about an hour.
 
 ## What it actually computes
 
-Real building footprints and heights from OpenStreetMap, real tree canopy, real
-terrain, and NOAA solar geometry. Rays are cast from both pavements of every
-street at 768 sun positions; the number you see assumes you walk on the shadier
-side. Rome's hills shadow each other, so Trastevere goes dark under the Janiculum
-in the early evening and the Tiber bridges lose the sun well before the open city
-does.
+Real building footprints from OpenStreetMap, heights from OSM tags and the
+Italian cadastre, real tree canopy, real terrain, and NOAA solar geometry. Rays
+are cast from both pavements of every street at 768 sun positions; the number
+you see assumes you walk on the shadier side. Rome's hills shadow each other, so
+Trastevere goes dark under the Janiculum in the early evening and the Tiber
+bridges lose the sun well before the open city does.
 
 Sanity check: at 2 pm on 15 August, Via dei Fori Imperiali is 0 % shaded and Via
 dei Coronari is 93 %. That is the right answer for both.
