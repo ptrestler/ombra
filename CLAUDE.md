@@ -155,6 +155,17 @@ to a version* — viewers keep seeing whichever version was pinned when the link
 was shared, so after a meaningful change, update the pin from the artifact's
 share menu or the link still shows the old build.
 
+That pin is easy to mistake for a failed publish. Signed in as the owner you get
+the newest version; signed out — which is what a fresh browser is — the same URL
+serves the pinned one, frame version and all. Check which you are looking at
+before concluding the publish did not land:
+
+    document.querySelector('iframe').src     // .../\_f/<version>/...
+
+The share URL is the same artifact under a shorter slug:
+`https://claude.ai/artifact/LsQ9MwiwY46nuxBJGoDkuN`. Either form works as `url`
+when publishing.
+
 ## Payload format
 
 One gzip blob, base64 in a `<script type="text/plain">`. Layout:
