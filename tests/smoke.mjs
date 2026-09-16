@@ -63,6 +63,11 @@ async function run(engine, label, breakStreams, which) {
     await p.waitForTimeout(500);
     check('street search', (await p.textContent('#cName')) === 'Via Giulia');
     await p.click('#btnRoute'); await p.waitForTimeout(300);
+    // the card opens with the A picker already showing; tapping the end it is
+    // asking about must not close the search out from under you
+    await p.click('#rFrom'); await p.waitForTimeout(200);
+    check('empty picker stays open when tapped',
+          await p.evaluate(() => document.querySelector('#rcard').classList.contains('picking')));
     await p.fill('#rSearch', 'Pantheon'); await p.waitForTimeout(200); await p.click('.res');
     await p.waitForTimeout(300);
     await p.click('#rTo'); await p.fill('#rSearch', 'Colosseo'); await p.waitForTimeout(200);

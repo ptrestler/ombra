@@ -248,7 +248,12 @@ tr.row:hover td{background:var(--panel-2)}
 #strip{width:100%;height:62px;display:block;margin-top:9px}
 .striplab{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);
   font-variant-numeric:tabular-nums;margin-top:1px}
-.close{border:none;background:transparent;color:var(--muted);font-size:19px;line-height:1;padding:4px 6px}
+.close{border:none;background:transparent;color:var(--muted);font-size:19px;line-height:1;
+  padding:4px 6px;position:relative}
+/* The glyph stays small; this gives it a 44px touch target without moving anything.
+   A close button has already shipped broken here once - see CLAUDE.md. */
+.close::after{content:"";position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);width:44px;height:44px}
 #cClose{position:absolute;top:4px;right:5px;z-index:3}
 .big{margin-top:6px}
 
@@ -1533,8 +1538,16 @@ $("#btnPlay").addEventListener("click", ()=>{
 });
 $("#btnRoute").addEventListener("click", ()=> st.routing ? closeRoute() : openRoute());
 $("#rClose").addEventListener("click", closeRoute);
-$("#rFrom").addEventListener("click", ()=> st.pick==="a" ? (st.pick=null, renderRoute()) : openPick("a"));
-$("#rTo").addEventListener("click",   ()=> st.pick==="b" ? (st.pick=null, renderRoute()) : openPick("b"));
+// The card opens with the A picker already showing, so a plain toggle made the
+// first tap on "Where are you now?" close the search instead of answering it.
+// Collapse only when that end is already set; otherwise refocus, and never wipe
+// what has been typed.
+const pickTap = (which, has) => () => {
+  if(st.pick!==which) return openPick(which);
+  if(has()){ st.pick=null; renderRoute(); } else $("#rSearch").focus();
+};
+$("#rFrom").addEventListener("click", pickTap("a", ()=>st.aL));
+$("#rTo").addEventListener("click",   pickTap("b", ()=>st.bL));
 $("#rSwap").addEventListener("click", ()=>{
   const a=st.a,al=st.aL; st.a=st.b; st.aL=st.bL; st.b=a; st.bL=al;
   st.pick=null; recompute(); renderRoute(); schedule(false); });
