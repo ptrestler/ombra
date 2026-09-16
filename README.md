@@ -40,5 +40,7 @@ bite you.
 
 ## Licence / attribution
 
-Map data © OpenStreetMap contributors, ODbL. Elevation data courtesy of the
-USGS/NASA SRTM programme via AWS Open Data.
+Map data © OpenStreetMap contributors, ODbL. Building heights also from
+[EUBUCCO](https://eubucco.com/) v0.2 (ODbL), whose Lazio rows come from the
+Italian cadastre. Elevation data courtesy of the USGS/NASA SRTM programme via
+AWS Open Data.

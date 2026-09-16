@@ -117,6 +117,23 @@ button{cursor:pointer}
   backdrop-filter:blur(10px);box-shadow:var(--shadow);font-size:15px;line-height:1}
 .iconbtn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:transparent}
 
+/* ---------- zoom controls ---------- */
+/* Scroll-to-zoom is invisible until you try it, and on a trackpad or in Firefox
+   it barely moved the map at all. These are the discoverable way in. */
+#zoomctl{position:absolute;z-index:5;right:12px;top:56px;display:flex;flex-direction:column;gap:6px}
+#zoomctl .iconbtn{width:38px;height:38px;font-size:17px;position:relative}
+/* The glyphs stay 38px to match the masthead; this gives each a 44px touch
+   target. The 6px gap makes the pitch exactly 44, so they tile without overlap. */
+#zoomctl .iconbtn::after{content:"";position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);width:44px;height:44px}
+#zoomctl .iconbtn:disabled{opacity:.4;cursor:default}
+/* On a phone the route panel fills the upper map, and the zoom stack ends up
+   buried under it. Desktop lays the panel out bottom-right, where there is no
+   clash, so it only has to give way on narrow screens. */
+#stage.routing #zoomctl{display:none}
+#zoomctl .zfit svg{width:15px;height:15px;fill:none;stroke:currentColor;
+  stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
 /* ---------- legend ---------- */
 #legend{position:absolute;z-index:5;left:12px;bottom:12px;pointer-events:none;
   background:color-mix(in srgb,var(--panel) 88%,transparent);backdrop-filter:blur(10px);
@@ -172,6 +189,10 @@ button{cursor:pointer}
 .btn{flex:0 0 auto;padding:9px 13px;border-radius:10px;border:1px solid var(--line);
   background:var(--panel-2);font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+/* This used to be an unlabelled arrow glyph in the masthead, which nobody found.
+   It is the app's second job, so it gets a full-width button with its name on it. */
+.btn.route{width:100%;margin-top:7px;justify-content:center;padding:10px 13px;font-size:13px}
+.btn.route[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:transparent}
 #search{flex:1;min-width:0;padding:9px 11px;border-radius:10px;border:1px solid var(--line);
   background:var(--panel-2);font-size:12.5px}
 #search::placeholder{color:var(--muted)}
@@ -214,6 +235,13 @@ tr.row:hover td{background:var(--panel-2)}
 #card,#rcard{position:absolute;z-index:7;left:12px;right:12px;bottom:12px;background:var(--panel);
   border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:12px 14px 13px;
   display:none}
+/* The route panel is tall, and on a phone it used to grow straight off the top
+   of the map - the "where are you now?" button ended up above the viewport and
+   unreachable. Cap it to the map and let it scroll instead. The route panel
+   stops short of the masthead as well, or it swallows the buttons up there. */
+#card,#rcard{overflow:auto;-webkit-overflow-scrolling:touch}
+#card{max-height:calc(100% - 24px)}
+#rcard{max-height:calc(100% - 84px)}
 #card.open,#rcard.open{display:block}
 #rClose{position:absolute;top:4px;right:5px;z-index:3}
 .rpts{position:relative;display:flex;flex-direction:column;gap:5px;padding-right:34px}
@@ -284,20 +312,17 @@ tr.row:hover td{background:var(--panel-2)}
 #loading h1{font-family:"Bodoni Moda",Georgia,serif;font-size:30px;margin:0 0 6px;font-weight:600}
 #loading p{margin:0;font-size:12px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
 
-#deskList{display:none}
 @media (min-width:860px){
-  #deskList{display:block;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
-  #deskList .dlhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-  #deskList h2{margin:0;font-family:"Bodoni Moda",Georgia,serif;font-size:15px;font-weight:600}
-  #deskList .tabs{padding:0;gap:4px}
-  #deskList .tab{padding:5px 10px;font-size:11px}
   #app{flex-direction:row-reverse}
   #console{width:388px;flex:0 0 388px;border-top:none;border-left:1px solid var(--line);
     overflow:auto;padding:16px 18px}
   .clock{font-size:38px}
   #sheet{left:auto;width:388px;border-left:1px solid var(--line)}
   #card,#rcard{left:auto;width:360px;right:16px;bottom:16px}
+  #rcard{max-height:calc(100% - 32px)}
   #legend{bottom:16px;left:16px}
+  #zoomctl{right:16px;top:60px}
+  #stage.routing #zoomctl{display:flex}
   .desk-note{display:block}
 }
 .desk-note{display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);
@@ -316,11 +341,16 @@ tr.row:hover td{background:var(--panel-2)}
         <p>Shade on every street</p>
       </div>
       <div class="topbtns">
-        <button class="iconbtn" id="btnRoute" title="Plan a shady walk" aria-label="Plan a shady walk" aria-pressed="false">&#8674;</button>
         <button class="iconbtn" id="btnList" title="Shadiest streets" aria-label="Shadiest streets">&#9776;</button>
         <button class="iconbtn" id="btnInfo" title="How this works" aria-label="How this works">?</button>
         <button class="iconbtn" id="btnTheme" title="Switch to dark mode" aria-label="Switch to dark mode">&#9790;</button>
       </div>
+    </div>
+
+    <div id="zoomctl">
+      <button class="iconbtn" id="btnZin"  title="Zoom in (+)"   aria-label="Zoom in">&#43;</button>
+      <button class="iconbtn" id="btnZout" title="Zoom out (−)" aria-label="Zoom out">&#8722;</button>
+      <button class="iconbtn zfit" id="btnZfit" title="Whole city (0)" aria-label="Show the whole city"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/></svg></button>
     </div>
 
     <div id="legend">
@@ -420,10 +450,11 @@ tr.row:hover td{background:var(--panel-2)}
       <input id="search" type="search" placeholder="Find a street&#8230;" aria-label="Find a street">
     </div>
 
-    <div id="deskList"></div>
+    <button class="btn route" id="btnRoute" aria-pressed="false">
+      <span aria-hidden="true">&#8674;</span> Plan a shady walk</button>
 
     <div class="desk-note">
-      Drag to pan, scroll to zoom, click any street to see its whole day.
+      Drag to pan, scroll or +/− to zoom, click any street to see its whole day.
       Shade is ray-traced against OpenStreetMap building footprints, heights and tree canopy;
       sun angles from the NOAA solar-position algorithm. <b>How it works</b> has the caveats.
     </div>
@@ -719,6 +750,7 @@ function drawLines(){
 }
 
 function drawOver(){
+  cvLine.style.opacity = (st.routing && st.route) ? "0.3" : "1";
   const ctx = cvOver.getContext("2d");
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.clearRect(0,0,W,Hh);
@@ -735,7 +767,7 @@ function drawOver(){
   if(st.routing){
     const fi=frameIndex();
     if(st.route){
-      const wid=Math.max(4.5, Math.min(15, st.scale*8));
+      const wid=Math.max(6, Math.min(16, st.scale*8));
       const path=(colour,width,which)=>{
         ctx.strokeStyle=colour; ctx.lineWidth=width; ctx.lineCap="round"; ctx.lineJoin="round";
         for(const e of st.route.edges){
@@ -747,7 +779,11 @@ function drawOver(){
           ctx.stroke();
         }
       };
-      path(C.ink, wid+6); path(C.ground, wid+3);
+      // The route is drawn in the same shade ramp as every other street, which
+      // is the point of it - you want to see where your walk is sunny. That
+      // also made it vanish into the map, so while a route is up the street
+      // layer is dimmed behind it and the casing is widened into a ribbon.
+      path(C.ink, wid+9); path(C.ground, wid+5);
       for(let b=0;b<NB;b++) path(RAMP[b], wid, b);
     }
     for(const [n,lab,fill,ink] of [[st.a,"A",C.ink,C.ground],[st.b,"B",C.accent,C.ground]]){
@@ -883,24 +919,15 @@ function renderList(){
     }
     html += '</tbody></table>';
   }
-  const targets = [$("#sheetBody")];
-  const dl = $("#deskList");
-  if(dl && getComputedStyle(dl).display !== "none"){
-    dl.innerHTML = '<div class="dlhead"><h2>'+(asc?"Worst sun":"Shadiest streets")+'</h2>'+
-      '<div class="tabs"><button class="tab" data-t="shade" aria-pressed="'+(!asc)+'">Shade</button>'+
-      '<button class="tab" data-t="sun" aria-pressed="'+asc+'">Sun</button></div></div>'+
-      '<div id="dlBody"></div>';
-    dl.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{
-      sheetTab=b.dataset.t; renderList(); }));
-    targets.push($("#dlBody"));
-  }
-  for(const t of targets){
-    if(!t) continue;
-    t.innerHTML = html;
-    t.querySelectorAll("tr.row").forEach(tr=>{
-      tr.addEventListener("click", ()=>{ selectName(tr.dataset.name); closeSheet(); });
-    });
-  }
+  // The ranked list lives in the sheet only. It used to be mirrored into the
+  // desktop sidebar as well, but people look for streets on their own route,
+  // not in a leaderboard, and it crowded out the controls that matter.
+  const t = $("#sheetBody");
+  if(!t) return;
+  t.innerHTML = html;
+  t.querySelectorAll("tr.row").forEach(tr=>{
+    tr.addEventListener("click", ()=>{ selectName(tr.dataset.name); closeSheet(); });
+  });
 }
 
 const HOWTO = `
@@ -998,7 +1025,10 @@ crow walks.</li>
 
 <h3>Using it</h3>
 <ul>
-<li>Drag to pan, pinch or scroll to zoom, tap any street for its shade across the whole day.</li>
+<li>Drag to pan, pinch or scroll to zoom, tap any street for its shade across the whole day.
+Double-tap zooms in; the <b>+</b> and <b>−</b> buttons do the same, and the one below them
+returns to the whole city. On a keyboard: <b>+</b> and <b>−</b> zoom, arrows pan,
+<b>0</b> fits the city and <b>Esc</b> closes a card you did not mean to open.</li>
 <li>The scrubber runs 06:00 to 21:30; the warm band marks daylight for that month.</li>
 <li><b>Play day</b> animates it \u2014 watch the shade rotate out of the east-west streets
 around one in the afternoon.</li>
@@ -1292,14 +1322,16 @@ function labelForNode(n){
 const fmtLen = m => m>=1000 ? (m/1000).toFixed(m<10000?2:1)+" km" : Math.round(m)+" m";
 const fmtMin = m => Math.max(1,Math.round(m/75))+" min";
 function openRoute(){
-  st.routing=true; $("#btnRoute").setAttribute("aria-pressed","true");
+  st.routing=true; stage.classList.add("routing");
+  $("#btnRoute").setAttribute("aria-pressed","true");
   $("#card").classList.remove("open"); st.hi=null; st.sel=null;
   $("#rcard").classList.add("open");
   if(st.a<0) openPick("a"); else renderRoute();
   schedule(false);
 }
 function closeRoute(){
-  st.routing=false; $("#btnRoute").setAttribute("aria-pressed","false");
+  st.routing=false; stage.classList.remove("routing");
+  $("#btnRoute").setAttribute("aria-pressed","false");
   $("#rcard").classList.remove("open","picking");
   st.a=-1; st.b=-1; st.aL=""; st.bL=""; st.pick=null; st.mapPick=null;
   st.route=null; st.refRoute=null; schedule(false);
@@ -1496,7 +1528,7 @@ function pick(px,py){
 
 /* ---------- interaction ---------- */
 let ptrs=new Map(), lastDist=0, moved=0, dragging=false;
-const UIHIT = '#top, #card, #rcard, #sheet, #legend';
+const UIHIT = '#top, #zoomctl, #card, #rcard, #sheet, #legend';
 stage.addEventListener("pointerdown", e=>{
   if(e.target.closest && e.target.closest(UIHIT)) return;   // let the controls have the tap
   stage.setPointerCapture(e.pointerId);
@@ -1536,19 +1568,50 @@ function endPtr(e){
 }
 stage.addEventListener("pointerup", endPtr);
 stage.addEventListener("pointercancel", e=>{ptrs.delete(e.pointerId);dragging=false;stage.classList.remove("drag");});
+const ZMIN=0.045, ZMAX=6;
 function zoomAt(mx,my,f){
   const wx=ux(mx), wy=uy(my);
-  st.scale = Math.max(0.045, Math.min(6, st.scale*f));
+  st.scale = Math.max(ZMIN, Math.min(ZMAX, st.scale*f));
   st.cx = wx - (mx - W/2)/st.scale;
   st.cy = wy + (my - Hh/2)/st.scale;
-  clampView(); schedule(true);
+  clampView(); schedule(true); syncZoomBtns();
 }
+/* Buttons and keys zoom about the middle of the map, which is the part you are
+   looking at; the wheel and pinch zoom about the pointer. */
+function zoomStep(f){ zoomAt(W/2, Hh/2, f); }
+function fitAll(){
+  const b=H.bbox;
+  st.cx=(b.x0+b.x1)/2; st.cy=(b.y0+b.y1)/2;
+  st.scale = Math.min(0.34, Math.max(W/(b.x1-b.x0), Hh/(b.y1-b.y0)));
+  schedule(true); syncZoomBtns();
+}
+function syncZoomBtns(){
+  const zi=$("#btnZin"), zo=$("#btnZout");
+  if(zi) zi.disabled = st.scale >= ZMAX-1e-9;
+  if(zo) zo.disabled = st.scale <= ZMIN+1e-9;
+}
+/* `deltaY` is not comparable across devices: a mouse notch is about 100 px in
+   Chromium, 3 *lines* in Firefox, and a trackpad sends a stream of single-digit
+   pixels. The old handler read it as pixels, so one Firefox notch zoomed by
+   0.5 % instead of 17 %. Normalise to notches, then clamp so a fling cannot
+   cross the whole scale range in one event. */
+function wheelNotches(e){
+  const per = e.deltaMode===1 ? 3 : (e.deltaMode===2 ? 1 : 100);
+  return Math.max(-4, Math.min(4, e.deltaY/per));
+}
+/* Only the panels that actually scroll are exempt. The street card does not,
+   and swallowing the wheel over it left a dead corner of the map. */
 stage.addEventListener("wheel", e=>{
-  if(e.target.closest && e.target.closest('#sheet, #card, #rcard')) return;
+  if(e.target.closest && e.target.closest('#sheet, #rcard')) return;
   e.preventDefault();
   const r=stage.getBoundingClientRect();
-  zoomAt(e.clientX-r.left, e.clientY-r.top, Math.exp(-e.deltaY*0.0016));
+  zoomAt(e.clientX-r.left, e.clientY-r.top, Math.exp(-wheelNotches(e)*0.22));
 },{passive:false});
+stage.addEventListener("dblclick", e=>{
+  if(e.target.closest && e.target.closest(UIHIT)) return;
+  const r=stage.getBoundingClientRect();
+  zoomAt(e.clientX-r.left, e.clientY-r.top, e.shiftKey ? 1/1.8 : 1.8);
+});
 function clampView(){
   const b=H.bbox, m=400;
   st.cx=Math.max(b.x0-m,Math.min(b.x1+m,st.cx));
@@ -1563,6 +1626,36 @@ $("#btnPlay").addEventListener("click", ()=>{
   st.playing=true; $("#btnPlay").textContent="\u275a\u275a Pause";
   st.raf=setInterval(()=>{ st.ti=(st.ti+1)%32; updateReadouts(); drawLines(); drawOver(); }, 190);
   renderList();
+});
+$("#btnZin").addEventListener("click",  ()=> zoomStep(1.7));
+$("#btnZout").addEventListener("click", ()=> zoomStep(1/1.7));
+$("#btnZfit").addEventListener("click", fitAll);
+/* Every gesture on this map is invisible until you happen to try it. The keys
+   are the last way in: +/- zoom, arrows pan, 0 shows the whole city, and Escape
+   puts away a street card you did not mean to open. */
+addEventListener("keydown", e=>{
+  const t=e.target;
+  if(t && (t.tagName==="INPUT" || t.tagName==="TEXTAREA" || t.isContentEditable)){
+    if(e.key==="Escape") t.blur();
+    return;
+  }
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+  const k=e.key, pan=90/st.scale;
+  if(k==="+" || k==="=") zoomStep(1.7);
+  else if(k==="-" || k==="_") zoomStep(1/1.7);
+  else if(k==="0") fitAll();
+  else if(k==="Escape"){
+    if(sheetOpen) closeSheet();
+    else if(st.routing) closeRoute();
+    else if(st.sel) clearSel();
+    else return;
+  }
+  else if(k==="ArrowLeft"){  st.cx-=pan; clampView(); schedule(true); }
+  else if(k==="ArrowRight"){ st.cx+=pan; clampView(); schedule(true); }
+  else if(k==="ArrowUp"){    st.cy+=pan; clampView(); schedule(true); }
+  else if(k==="ArrowDown"){  st.cy-=pan; clampView(); schedule(true); }
+  else return;
+  e.preventDefault();
 });
 $("#btnRoute").addEventListener("click", ()=> st.routing ? closeRoute() : openRoute());
 $("#rClose").addEventListener("click", closeRoute);
@@ -1590,7 +1683,8 @@ document.querySelectorAll(".rm").forEach(b=>b.addEventListener("click", ()=>{
 $("#btnList").addEventListener("click", ()=> sheetOpen && sheetTab!=="how" ? closeSheet() : openSheet("shade"));
 $("#btnInfo").addEventListener("click", ()=> sheetOpen && sheetTab==="how" ? closeSheet() : openSheet("how"));
 $("#sClose").addEventListener("click", closeSheet);
-$("#cClose").addEventListener("click", ()=>{ $("#card").classList.remove("open"); st.hi=null; st.sel=null; schedule(false); });
+function clearSel(){ $("#card").classList.remove("open"); st.hi=null; st.sel=null; schedule(false); }
+$("#cClose").addEventListener("click", clearSel);
 $("#tabShade").addEventListener("click", ()=>openSheet("shade"));
 $("#tabSun").addEventListener("click", ()=>openSheet("sun"));
 $("#tabHow").addEventListener("click", ()=>openSheet("how"));
@@ -1676,10 +1770,8 @@ try{
       b.addEventListener("click",()=>{ st.mo=i; stop(); updateReadouts(); schedule(false); });
       mc.appendChild(b); });
 
-    const b=H.bbox;
-    st.cx=(b.x0+b.x1)/2; st.cy=(b.y0+b.y1)/2;
     resize();
-    st.scale = Math.min(0.34, Math.max(W/(b.x1-b.x0), Hh/(b.y1-b.y0)));
+    fitAll();
     updateReadouts(); drawAll(); renderList();
     window.ombra = {st, setPoint, setEnd, openPick, searchDest, entryXY, recompute,
                     renderRoute, frameIndex, nearestNode, labelForNode,

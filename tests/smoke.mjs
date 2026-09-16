@@ -62,6 +62,34 @@ async function run(engine, label, breakStreams, which) {
     await p.fill('#search', 'Via Giulia'); await p.press('#search', 'Enter');
     await p.waitForTimeout(500);
     check('street search', (await p.textContent('#cName')) === 'Via Giulia');
+    // Zoom used to be scroll-only, and the wheel handler read deltaY as pixels -
+    // so one Firefox notch (3 *lines*) zoomed by half a percent. The buttons are
+    // the discoverable way in; they must survive the panel z-order too.
+    const scale = () => p.evaluate(() => window.ombra.st.scale);
+    await p.click('#btnZfit'); await p.waitForTimeout(150);
+    const z0 = await scale();
+    await p.click('#btnZin'); await p.waitForTimeout(150); const z1 = await scale();
+    await p.click('#btnZout'); await p.waitForTimeout(150); const z2 = await scale();
+    check('zoom buttons zoom, and round-trip', z1 > z0 * 1.5 && Math.abs(z2 - z0) < 1e-9,
+          `${z0.toFixed(3)} -> ${z1.toFixed(3)} -> ${z2.toFixed(3)}`);
+    const wheelZoom = (deltaY, deltaMode) => p.evaluate(([dy, dm]) => {
+      const st = window.ombra.st, before = st.scale, stage = document.querySelector('#stage');
+      const r = stage.getBoundingClientRect();
+      stage.dispatchEvent(new WheelEvent('wheel', { deltaY: dy, deltaMode: dm, bubbles: true,
+        cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
+      const after = st.scale; st.scale = before; return after / before;
+    }, [deltaY, deltaMode]);
+    const px = await wheelZoom(-100, 0), line = await wheelZoom(-3, 1);
+    check('one wheel notch zooms the same in pixel and line mode',
+          px > 1.15 && Math.abs(px - line) < 1e-6, `${px.toFixed(3)} vs ${line.toFixed(3)}`);
+    // a stray tap selects a street; Escape has to put it away again
+    await p.click('#btnZfit'); await p.waitForTimeout(150);
+    await p.fill('#search', 'Via Giulia'); await p.press('#search', 'Enter');
+    await p.waitForTimeout(400);
+    await p.evaluate(() => document.activeElement.blur());
+    await p.keyboard.press('Escape'); await p.waitForTimeout(200);
+    check('Escape closes a street card you did not mean to open',
+          !(await p.evaluate(() => document.querySelector('#card').classList.contains('open'))));
     await p.click('#btnRoute'); await p.waitForTimeout(300);
     // the card opens with the A picker already showing; tapping the end it is
     // asking about must not close the search out from under you
@@ -84,6 +112,9 @@ async function run(engine, label, breakStreams, which) {
     await p.click('#btnTheme'); await p.waitForTimeout(250); const t1 = await gnd();
     await p.click('#btnTheme'); await p.waitForTimeout(250); const t2 = await gnd();
     check('theme toggle alternates', t0 !== t1 && t1 !== t2 && t0 === t2, `${t0} ${t1} ${t2}`);
+    // the phone route panel fills the upper map, so the zoom stack steps aside
+    check('route panel does not bury the zoom controls',
+          await p.evaluate(() => getComputedStyle(document.querySelector('#zoomctl')).display === 'none'));
     check('close button is clickable (z-order)',
           await p.locator('#rClose').isEnabled() &&
           await p.evaluate(() => { const r = document.querySelector('#rClose').getBoundingClientRect();
