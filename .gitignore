@@ -1,6 +1,13 @@
 # derived - rebuild with `make`
 build/
-dist/
+
+# dist/ is derived too, but the standalone is committed on purpose: it is the
+# thing you actually hand someone, and the only other copy lives inside a CI
+# zip. Re-run `make` and commit it again after anything that changes the model
+# or the page, or the download goes stale. (Negation needs dist/* rather than
+# dist/ - git will not look inside an excluded directory.)
+dist/*
+!dist/ombra-roma.html
 
 # The cached OSM and elevation downloads ARE committed, on purpose: a cold fetch
 # takes about an hour against public Overpass mirrors, and a failing mirror

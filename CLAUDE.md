@@ -134,6 +134,10 @@ Two different builds, and mixing them up wastes an afternoon:
 
 - **`dist/ombra-roma.html`** — the standalone. A complete document, works offline,
   from disk, anywhere. This is what you send people and what the tests load.
+  **It is committed**, unusually for a build artifact: it is the only copy anyone
+  can actually download, since the alternative was digging a zip out of a CI run.
+  That means it goes stale silently. `make` rewrites it, so `git status` will
+  tell you — commit it again with whatever changed the model or the page.
 - **`build/artifact.html`** — what gets published as a claude.ai Artifact:
   `web/template.html` + `build/data.b64`, assembled by `make artifact`. The
   platform wraps it in the document shell, so it carries no doctype or `<head>`

@@ -31,6 +31,10 @@ HEAD = """<!DOCTYPE html>
 TAIL = "\n</body>\n</html>\n"
 
 out = HEAD + body + TAIL
-io.open(dist("ombra-roma.html"), "w", encoding="utf-8").write(out)
+# newline="\n" to match build_artifact.py and .gitattributes, which both
+# say the build writes LF. Without it Python translates on Windows: the
+# standalone came out CRLF while the artifact did not, so git rewrote all
+# 5 MB of it on the way in.
+io.open(dist("ombra-roma.html"), "w", encoding="utf-8", newline="\n").write(out)
 print("standalone:", round(os.path.getsize(dist("ombra-roma.html"))/1e6, 2), "MB")
 print("starts:", repr(out[:60]))
