@@ -1,0 +1,52 @@
+# Browser tests cannot run on a Windows machine with Smart App Control enforced:
+# it blocks Playwright's unsigned WebKit DLLs and the process dies at init with
+# 0xC0000142. Linux runners have no such restriction, so CI is the reliable place
+# to run `make test`. The OSM and elevation caches are committed, so the build
+# needs no network fetch.
+name: build and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Build
+        run: make
+
+      - name: Test
+        run: make test
+
+      # Handy when the local machine cannot build: download the page from the run.
+      - name: Upload the standalone build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ombra-roma-html
+          path: dist/ombra-roma.html
+          if-no-files-found: warn
