@@ -102,7 +102,15 @@ button{cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
-#app{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--ground)}
+/* The Artifact host renders the page with viewport-fit=cover and puts the top
+   safe-area inset on :root as padding. #app is position:fixed, so it is laid out
+   against the viewport and that padding never reaches it - on a notched phone
+   the masthead sat underneath the status bar, where the title, the menu and the
+   light/dark toggle could not be seen or tapped. Take the inset here instead, so
+   everything inside moves with it. env() is 0 where there is no inset, so the
+   standalone build and every desktop are unchanged. */
+#app{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--ground);
+  padding-top:env(safe-area-inset-top,0px)}
 #stage{position:relative;flex:1;min-height:0;touch-action:none;cursor:grab}
 #stage.drag{cursor:grabbing}
 #stage>canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
