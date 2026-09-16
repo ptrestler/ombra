@@ -11,6 +11,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write          # the release step replaces the downloadable build
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -42,7 +45,8 @@ jobs:
       - name: Test
         run: make test
 
-      # Handy when the local machine cannot build: download the page from the run.
+      # Handy when a run fails and you want to see what it built. Arrives as a
+      # zip, and expires - the release below is the copy meant for humans.
       - name: Upload the standalone build
         if: always()
         uses: actions/upload-artifact@v4
@@ -50,3 +54,17 @@ jobs:
           name: ombra-roma-html
           path: dist/ombra-roma.html
           if-no-files-found: warn
+
+      # The page is 5.3 MB of base64 over gzip, so it barely compresses and git
+      # cannot delta it: committing each rebuild grew the repo by that much every
+      # time. A release asset lives outside the history, so the download is always
+      # the newest build and costs the repository nothing. One fixed tag, replaced
+      # in place, so the URL never changes:
+      #   https://github.com/ptrestler/ombra/releases/download/build/ombra-roma.html
+      - name: Publish it as the downloadable build
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view build >/dev/null 2>&1 || gh release create build             --title "Latest build"             --notes "The current standalone page, rebuilt on every push to main. One self-contained file: download it and open it in any browser. Works offline, and unlike the hosted artifact it can use your location."
+          gh release upload build dist/ombra-roma.html --clobber

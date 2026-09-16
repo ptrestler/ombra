@@ -951,8 +951,10 @@ const HOWTO = `
 <div class="prose">
 <h3>What you're looking at</h3>
 <p>Every street in Rome's historic core, coloured by how much of it is in shade at the
-moment you've scrubbed to \u2014 <b>blue is shaded, orange is open sun</b>. It's computed, not
-guessed: real building footprints, real heights, real sun angles.</p>
+moment you've scrubbed to \u2014 <b>red is open sun, blue is full shade</b>, and the purple
+between them is a street that is about half and half. It is ray-traced, not guessed: real
+building footprints, real terrain, real sun angles. Heights are the weak link, and
+<i>Where the data comes from</i> below says how weak.</p>
 
 <h3>How the shade is worked out</h3>
 <ul>
@@ -976,9 +978,9 @@ fastest, and least at the solstices.</li>
 </ul>
 
 <h3>Planning a walk</h3>
-<p>Tap the <b>\u21e2</b> button and fill in the two ends of the walk. Each one takes a search
-across <b>872 landmarks</b> \u2014 churches, museums, piazzas, stations, parks, ruins \u2014 and
-every one of the <b>2,088 named streets</b> on the map, so you can type "Pantheon", "Trastevere"
+<p>Press <b>Plan a shady walk</b> and fill in the two ends. Answer the first and it asks
+you the second. Each one searches <b>__NPLACE__ landmarks</b> \u2014 churches, museums, piazzas, stations, parks, ruins \u2014 and
+every one of the <b>__NNAME__ named streets</b> on the map, so you can type "Pantheon", "Trastevere"
 or "Via dei Coronari" rather than hunting for a pixel. <b>Pick on the map</b> is there for a doorway with
 no name \u2014 it tells you which street it landed on. <b>Use my location</b> reads your GPS, but
 only where the browser will hand it over: the copy of this page hosted on claude.ai runs inside a
@@ -1038,6 +1040,12 @@ edge of the map. Start and end points snap to the connected part, which can be a
 metres from where you tapped.</li>
 <li>No crossings, traffic lights, steps-versus-ramp or one-way logic \u2014 it routes as the
 crow walks.</li>
+<li><b>The city-wide numbers are solid. A single street may not be.</b> Two thirds of the
+buildings have a height somebody measured; the rest are interpolated, at about
+<b>5.5&nbsp;m</b> of error. Put that error back through the model and 94% of the map does
+not move at all \u2014 but what moves, moves hard: <b>one reading in seventeen</b> shifts by
+more than ten percentage points, and nothing on the map tells you which one. Ray blocking
+is a threshold, so a few metres either changes nothing or changes everything.</li>
 </ul>
 
 <h3>Using it</h3>
@@ -1065,7 +1073,11 @@ function openSheet(tab){
      .replace("__NKNOWN__", H.nknown ? H.nknown.toLocaleString("en") : "2,443")
      .replace("__NCAD__", H.ncad ? H.ncad.toLocaleString("en") : "7,140")
      .replace("__NIMP__", (H.nbld && H.nknown && H.ncad)
-        ? (H.nbld - H.nknown - H.ncad).toLocaleString("en") : "4,575");
+        ? (H.nbld - H.nknown - H.ncad).toLocaleString("en") : "4,575")
+     // counted off the payload rather than typed in: the street total read
+     // "2,088" for several rebuilds after it was really 2,067
+     .replace("__NPLACE__", H.pl ? H.pl.length.toLocaleString("en") : "872")
+     .replace("__NNAME__", H.names ? H.names.length.toLocaleString("en") : "2,067");
   else renderList();
   $("#sheetBody").scrollTop=0;
 }

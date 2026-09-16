@@ -25,13 +25,13 @@ as re-fetching from public Overpass mirrors takes about an hour.
 
 ## Just give me the file
 
-[`dist/ombra-roma.html`](dist/ombra-roma.html) is committed — one 5.3 MB file,
-no build needed. Open the link, press **Download raw file**, open it in any
-browser. It works offline and from a phone, and unlike the hosted copy it can
-use your location.
+**[Download the page](https://github.com/ptrestler/ombra/releases/download/build/ombra-roma.html)**
+— one self-contained 5.3 MB file, no build needed. Open it in any browser. It
+works offline and from a phone, and unlike the hosted copy it can use your
+location.
 
-It is a build artifact, so it is only as fresh as the last time someone ran
-`make` and committed it.
+That link is a release asset, rebuilt and replaced by CI on every push to
+`main`, so it is always the current build and the URL never changes.
 
 ## What it actually computes
 

@@ -134,10 +134,12 @@ Two different builds, and mixing them up wastes an afternoon:
 
 - **`dist/ombra-roma.html`** — the standalone. A complete document, works offline,
   from disk, anywhere. This is what you send people and what the tests load.
-  **It is committed**, unusually for a build artifact: it is the only copy anyone
-  can actually download, since the alternative was digging a zip out of a CI run.
-  That means it goes stale silently. `make` rewrites it, so `git status` will
-  tell you — commit it again with whatever changed the model or the page.
+  Not committed: it is 5.3 MB of base64 over gzip, which barely compresses and
+  cannot be delta'd, so every rebuild added that much to the history for good.
+  CI uploads it to a release asset on a fixed `build` tag instead, replaced in
+  place on every push to `main`, so the download is always current, the URL never
+  changes and the repository pays nothing:
+  `https://github.com/ptrestler/ombra/releases/download/build/ombra-roma.html`
 - **`build/artifact.html`** — what gets published as a claude.ai Artifact:
   `web/template.html` + `build/data.b64`, assembled by `make artifact`. The
   platform wraps it in the document shell, so it carries no doctype or `<head>`
