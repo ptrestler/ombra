@@ -84,8 +84,12 @@ async function run(engine, label, breakStreams, which) {
       if (dom < 8) day = 1; else if (dom < 23) day = 15; else { day = 1; mo = (mo+1)%12; }
       return { got:[st.mo, st.day, st.ti], want:[mo, day, ti] };
     });
+    // ti within one slot, not equal: the page picks its moment at load and this
+    // recomputes seconds later, so a run that straddles a half-hour boundary
+    // would fail on a correct build.
     check('opens at the moment nearest now, not a hardcoded August',
-          JSON.stringify(when.got) === JSON.stringify(when.want),
+          when.got[0] === when.want[0] && when.got[1] === when.want[1] &&
+          Math.abs(when.got[2] - when.want[2]) <= 1,
           `${when.got} vs ${when.want}`);
     // Zoom used to be scroll-only, and the wheel handler read deltaY as pixels -
     // so one Firefox notch (3 *lines*) zoomed by half a percent. The buttons are
@@ -115,6 +119,18 @@ async function run(engine, label, breakStreams, which) {
     await p.keyboard.press('Escape'); await p.waitForTimeout(200);
     check('Escape closes a street card you did not mean to open',
           !(await p.evaluate(() => document.querySelector('#card').classList.contains('open'))));
+    // Pin the clock. The page opens on whatever sampled moment is nearest to now,
+    // so on a UTC runner these route checks ran at 20:00 - when the whole city is
+    // shaded, the shadiest way IS the shortest, and the comparison text they
+    // assert never appears. The checks below describe a specific afternoon.
+    const setClock = (mo, day, ti) => p.evaluate(([m, d, t]) => {
+      const st = window.ombra.st; st.mo = m; st.day = d; st.ti = t;
+      const el = document.querySelector('#time');
+      el.value = t; el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, [mo, day, ti]);
+    await setClock(7, 15, 16);                       // 14:00, 15 August
+    await p.waitForTimeout(250);
+
     await p.click('#btnRoute'); await p.waitForTimeout(300);
     // the card opens with the A picker already showing; tapping the end it is
     // asking about must not close the search out from under you
@@ -141,6 +157,17 @@ async function run(engine, label, breakStreams, which) {
     check('routes Pantheon to Colosseo', /km/.test(km), km);
     check('shows the shortest-route comparison',
           /Shortest way/.test(await p.textContent('#rCompare')));
+    // ...and after sunset there is nothing to trade, which it should say rather
+    // than quietly offering a detour that buys no shade
+    await setClock(8, 15, 28);                       // 20:00, 15 September
+    await p.evaluate(() => { window.ombra.recompute(); window.ombra.renderRoute(); });
+    await p.waitForTimeout(300);
+    check('after sunset it says a detour would buy nothing',
+          /no detour needed/i.test(await p.textContent('#rCompare')),
+          (await p.textContent('#rCompare')).replace(/\s+/g, ' ').trim().slice(0, 60));
+    await setClock(7, 15, 16);
+    await p.evaluate(() => { window.ombra.recompute(); window.ombra.renderRoute(); });
+    await p.waitForTimeout(300);
     // must alternate, not recompute from the system each time - when storage is
     // blocked that bug makes the toggle stick on one theme for ever
     const gnd = () => p.evaluate(() => getComputedStyle(document.documentElement)
