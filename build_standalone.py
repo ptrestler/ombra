@@ -1,8 +1,12 @@
 import io, os
+from buildstamp import stamp
 from paths import osm, dem, build, web, dist
 body = io.open(web("template.html"), encoding="utf-8").read()
 data = io.open(build("data.b64"), encoding="utf-8").read()
 body = body.replace("__DATA__", data)
+BUILD = stamp()
+assert "__BUILD__" in body, "build stamp placeholder not found"
+body = body.replace("__BUILD__", BUILD)
 
 # a downloaded file may be opened with no network (or a blocked font host):
 # load the webfont without blocking first paint, and fall back cleanly.
@@ -36,5 +40,8 @@ out = HEAD + body + TAIL
 # standalone came out CRLF while the artifact did not, so git rewrote all
 # 5 MB of it on the way in.
 io.open(dist("ombra-roma.html"), "w", encoding="utf-8", newline="\n").write(out)
+# what the deployed page polls to notice a newer build exists
+io.open(dist("version.txt"), "w", encoding="utf-8", newline="\n").write(BUILD + "\n")
 print("standalone:", round(os.path.getsize(dist("ombra-roma.html"))/1e6, 2), "MB")
+print("build:", BUILD)
 print("starts:", repr(out[:60]))

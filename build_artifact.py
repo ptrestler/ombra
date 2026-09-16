@@ -3,11 +3,16 @@
 # time, so unlike build_standalone.py this adds no document shell. The font
 # link is left alone too - the hosted page always has a network.
 import io, os
+from buildstamp import stamp
 from paths import build, web
 body = io.open(web("template.html"), encoding="utf-8").read()
 data = io.open(build("data.b64"), encoding="utf-8").read()
 assert "__DATA__" in body, "payload placeholder not found in template"
 out = body.replace("__DATA__", data)
+BUILD = stamp()
+assert "__BUILD__" in body, "build stamp placeholder not found"
+out = out.replace("__BUILD__", BUILD)
+
 assert "__DATA__" not in out
 assert not out.lstrip().lower().startswith("<!doctype"), "artifact build must not carry a document shell"
 io.open(build("artifact.html"), "w", encoding="utf-8", newline="\n").write(out)

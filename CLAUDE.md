@@ -141,6 +141,23 @@ sits on one in the sidebar and the other on a phone. Note it returns
 `rgb(r,g,b)` while the tokens are hex; mixing the two up is what made the first
 attempt paint every number the same flat ink.
 
+**A push can be live and still not be on the screen.** Pages serves
+`index.html` with `Cache-Control: max-age=600` and gives no way to change that,
+so for up to ten minutes a browser that already has the page keeps answering
+from its own copy. Closing the tab is what fixes it. That cost two rounds of
+"it's not there" over a button that was in every build, and the wrong conclusion
+both times was that the deploy had failed. The page cannot beat the cache, so it
+notices instead: `buildstamp.py` makes a time-and-commit string, both builders
+stamp it into the template, the standalone writes the same string to
+`dist/version.txt`, CI deploys the two together, and `checkFresh` fetches
+`version.txt` with `no-store` on load and again whenever the tab comes back to
+the front. If they disagree, a **Reload** pill appears. It only fetches on
+http(s) — a `file://` copy cannot make that request, and what comes back is a
+console error the browser logs before `.catch` ever sees it. The artifact is on
+https and just 404s, which is the same as silence. So the prompt can only appear
+where something deployed a `version.txt`, which is the only place it means
+anything.
+
 **Test in WebKit, not just Chromium.** Three separate bugs (the Streams hang, the
 geolocation message, an unclickable close button behind a stacking context) were
 invisible in Chromium. `npx playwright install webkit` if it is missing.
@@ -154,7 +171,8 @@ Three places the page ends up, and mixing them up wastes an afternoon:
 - **<https://ptrestler.github.io/ombra/>** — GitHub Pages, deployed by the
   `deploy` job from the same build the tests ran against. Nothing is committed
   for it. This is the link to send someone: a top-level HTTPS document, so it is
-  the only hosted copy where **geolocation works**.
+  the only hosted copy where **geolocation works**. It is deployed with a `version.txt`
+  beside it, which is how the page spots a browser holding a cached build.
 
 Two builds feed all of this:
 

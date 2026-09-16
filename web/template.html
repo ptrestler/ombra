@@ -155,6 +155,21 @@ button{cursor:pointer}
 #zoomctl .zfit svg{width:15px;height:15px;fill:none;stroke:currentColor;
   stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 
+/* ---------- stale-build prompt ---------- */
+/* GitHub Pages serves index.html with max-age=600 and offers no way to change
+   that, so for ten minutes after a deploy a phone will keep showing the build it
+   already has - which looked exactly like a feature failing to ship. The page
+   cannot beat the cache, but it can notice: version.txt is fetched no-store and
+   compared with the stamp baked in at build time. Nothing to poll against on the
+   artifact or from a file:// copy, where the fetch simply fails and this stays
+   hidden. */
+#fresh{position:absolute;z-index:8;left:50%;transform:translateX(-50%);
+  bottom:calc(12px + env(safe-area-inset-bottom,0px));
+  padding:9px 15px;border-radius:999px;border:1px solid var(--line);
+  background:var(--panel);color:var(--ink);box-shadow:var(--shadow);
+  font-size:12.5px;font-weight:500;white-space:nowrap}
+#fresh[hidden]{display:none}
+
 /* ---------- legend ---------- */
 #legend{position:absolute;z-index:5;left:12px;bottom:12px;pointer-events:none;
   background:color-mix(in srgb,var(--panel) 88%,transparent);backdrop-filter:blur(10px);
@@ -405,6 +420,8 @@ tr.row:hover td{background:var(--panel-2)}
       <button class="iconbtn" id="btnZout" title="Zoom out (−)" aria-label="Zoom out">&#8722;</button>
       <button class="iconbtn zfit" id="btnZfit" title="Whole city (0)" aria-label="Show the whole city"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/></svg></button>
     </div>
+
+    <button id="fresh" hidden>A newer version is ready &#183; <b>Reload</b></button>
 
     <div id="legend">
       <div class="lb">Shade on the better side</div>
@@ -738,6 +755,26 @@ function nowFrame(){
    40-metre segments and a 2-metre height grid stays as it is. This only changes
    what the app reports back: route lengths, street lengths, the detour, the
    metres in the sun. */
+/* Stamped by build_standalone.py / build_artifact.py. Shown in "How it works",
+   and compared against version.txt to spot a cached copy. */
+const BUILD = "__BUILD__";
+
+function checkFresh(){
+  /* Only where a server could have put a version.txt. A file:// copy would
+     fail this fetch anyway, but it fails it loudly - the console error is
+     the browser refusing a cross-origin request, not something to catch. */
+  if(!/^https?:$/.test(location.protocol)) return;
+  // relative to the page, so it only resolves where a deploy put it
+  fetch("version.txt?t=" + Date.now(), {cache:"no-store"})
+    .then(r => r.ok ? r.text() : null)
+    .then(t => {
+      if(!t) return;
+      const latest = t.trim();
+      if(latest && latest !== BUILD) $("#fresh").hidden = false;
+    })
+    .catch(()=>{});          // offline, or no such file - both fine
+}
+
 const UNIT_KEY = "ombra.units";
 let imperial = false;
 try{ imperial = localStorage.getItem(UNIT_KEY) === "mi"; }catch(e){}
@@ -1116,6 +1153,9 @@ their tagged neighbours, weighted by distance.</li>
 <li><b>Terrain</b> from the AWS Open Data terrain tiles (SRTM-derived, ~30&nbsp;m),
 sampled onto a 10&nbsp;m grid covering the map plus a 2&nbsp;km margin so hills outside
 the frame still cast into it.</li>
+<li>Build <b>__BUILD__</b>. If something you were told had shipped is missing, that
+is how to tell: the hosted page is cached for ten minutes after a deploy, and a
+prompt appears at the bottom once a newer one exists.</li>
 <li>Data \u00a9 OpenStreetMap contributors, ODbL. Building heights also from
 EUBUCCO v0.2 (ODbL), derived from the Lazio cadastre. Elevation data courtesy of the
 USGS/NASA SRTM programme via AWS Open Data.</li>
@@ -1687,7 +1727,7 @@ function pick(px,py){
 
 /* ---------- interaction ---------- */
 let ptrs=new Map(), lastDist=0, moved=0, dragging=false;
-const UIHIT = '#top, #zoomctl, #card, #rcard, #sheet, #legend';
+const UIHIT = '#top, #zoomctl, #card, #rcard, #sheet, #legend, #fresh';
 stage.addEventListener("pointerdown", e=>{
   if(e.target.closest && e.target.closest(UIHIT)) return;   // let the controls have the tap
   stage.setPointerCapture(e.pointerId);
@@ -1822,6 +1862,14 @@ $("#btnUnits").addEventListener("click", ()=>{
   imperial = !imperial;
   try{ localStorage.setItem(UNIT_KEY, imperial ? "mi" : "km"); }catch(e){}
   applyUnits();
+});
+
+$("#fresh").addEventListener("click", ()=> location.reload());
+checkFresh();
+// and again when the tab comes back, which is when a phone has usually been
+// sitting on a stale copy
+document.addEventListener("visibilitychange", ()=>{
+  if(!document.hidden && $("#fresh").hidden) checkFresh();
 });
 
 $("#btnZin").addEventListener("click",  ()=> zoomStep(1.7));
@@ -1980,6 +2028,7 @@ try{
     fitAll();
     updateReadouts(); drawAll(); renderList();
     window.ombra = {st, setPoint, setEnd, openPick, searchDest, entryXY, recompute, rampInk,
+                    BUILD, checkFresh,
                     renderRoute, frameIndex, nearestNode, labelForNode,
                     nodeXY:i=>[NODEX[i],NODEY[i]], comp:i=>COMP[i], bigc:()=>BIGC,
                     get data(){return D}, get head(){return H}};

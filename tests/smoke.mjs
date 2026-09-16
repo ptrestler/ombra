@@ -4,7 +4,8 @@ import { chromium, webkit, devices } from 'playwright';
 import { pathToFileURL } from 'node:url';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const page_ = resolve(root, 'dist/ombra-roma.html');
@@ -228,6 +229,9 @@ async function run(engine, label, breakStreams, which) {
           await p.locator('#rClose').isEnabled() &&
           await p.evaluate(() => { const r = document.querySelector('#rClose').getBoundingClientRect();
             return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.id === 'rClose'; }));
+    // no version.txt to fetch here, and a downloaded copy must never nag
+    check('no stale-build prompt from a file:// copy',
+          await p.evaluate(() => document.querySelector('#fresh').hidden));
   }
   check('no console or page errors', errs.length === 0, errs.slice(0, 2).join(' | '));
   await browser.close();
@@ -259,9 +263,65 @@ async function desktopLayout(){
   await browser.close();
 }
 
+
+// GitHub Pages serves the page with a ten-minute cache and gives no way to
+// change that, so for a while after a deploy a phone can still be holding the
+// old copy. The page cannot beat the cache, so it notices instead: it fetches
+// version.txt with no-store and offers a reload when that disagrees with the
+// stamp baked into it. The quiet cases matter most - the artifact and a file://
+// copy have no version.txt at all, and must never nag.
+async function freshness(){
+  console.log('');
+  console.log('Chromium, served over HTTP (how Pages serves it)');
+  const stampFile = resolve(root, 'dist/version.txt');
+  if (!existsSync(stampFile)) {
+    check('version.txt written beside the build', false, 'missing');
+    return;
+  }
+  const stamp = readFileSync(stampFile, 'utf8').trim();
+  const html  = readFileSync(page_);
+  let version = null;                    // what version.txt answers with, per case
+  const srv = createServer((req, res) => {
+    if (req.url.split('?')[0] === '/version.txt') {
+      if (version === null) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      return res.end(version);
+    }
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(html);
+  });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const port = srv.address().port;
+  const browser = await chromium.launch(EXE.chromium ? { executablePath: EXE.chromium } : {});
+  const load = async (v) => {
+    version = v;
+    const ctx = await browser.newContext({ ...devices['iPhone 13'] });
+    const p = await ctx.newPage();
+    await p.route('**fonts.googleapis.com**', r => r.abort());
+    await p.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => document.querySelector('#loading').style.display === 'none',
+                            { timeout: 45000 });
+    await p.waitForTimeout(600);         // the check is a fetch, so give it a beat
+    const out = await p.evaluate(() => ({ build: window.ombra.BUILD,
+                                          up: !document.querySelector('#fresh').hidden }));
+    await ctx.close();
+    return out;
+  };
+  const same = await load(stamp);
+  check('the page carries the stamp the build wrote', same.build === stamp, same.build);
+  check('no prompt while version.txt agrees', same.up === false);
+  const newer = await load('2099-01-01 00:00 deadbee');
+  check('prompt once version.txt has moved on', newer.up === true);
+  const none = await load(null);
+  check('no prompt where there is no version.txt', none.up === false);
+  await browser.close();
+  srv.close();
+}
+
 await run(chromium, 'Chromium', false, 'chromium');
 await run(webkit, 'WebKit', false, 'webkit');
 await run(webkit, 'WebKit with the Streams API broken (iOS Quick Look)', true, 'webkit');
 await desktopLayout();
+await freshness();
 console.log(`\n${failures ? failures + ' CHECKS FAILED' : 'all checks passed'}`);
 process.exit(failures ? 1 : 0);

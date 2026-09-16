@@ -54,7 +54,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ombra-roma-html
-          path: dist/ombra-roma.html
+          # version.txt travels with the page: the deployed copy polls it to
+          # notice when a browser is holding a cached build
+          path: |
+            dist/ombra-roma.html
+            dist/version.txt
           if-no-files-found: warn
 
       # The page is 5.3 MB of base64 over gzip, so it barely compresses and git
@@ -89,7 +93,13 @@ jobs:
           path: site
 
       # Pages serves index.html at the directory root; the build has one name.
-      - run: mv site/ombra-roma.html site/index.html
+      # version.txt sits beside it, already written by the build.
+      - run: |
+          mv site/ombra-roma.html site/index.html
+          # without this the deployed page has nothing to poll, and a browser
+          # sitting on a cached copy goes unnoticed. Fail loudly instead.
+          test -s site/version.txt
+          cat site/version.txt
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
