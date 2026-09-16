@@ -192,7 +192,7 @@ move, move hard: >1 pp, >5 pp and >10 pp are all the same 5.9 % of values, and
 3.7 % move by more than 20 pp. Ray blocking is a threshold — a few metres either
 does not change whether the sun is occluded, or changes it completely. So the
 aggregate numbers are robust and individual streets are not, which is the
-opposite of the intuition that "83 % estimated" suggests.
+opposite of what "a third of the heights are estimated" suggests.
 
 **Adding the cadastre did not change that shape, and was not expected to.**
 Before it, the same test moved 5.5 % of values; after, 5.9 %. Fewer heights are
