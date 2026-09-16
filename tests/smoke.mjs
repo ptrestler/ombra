@@ -62,6 +62,31 @@ async function run(engine, label, breakStreams, which) {
     await p.fill('#search', 'Via Giulia'); await p.press('#search', 'Enter');
     await p.waitForTimeout(500);
     check('street search', (await p.textContent('#cName')) === 'Via Giulia');
+    // The console was 49% of a phone screen. The date grid folds away, and the
+    // search box must not go with it - that regression cost "Find a street".
+    const conH = () => p.evaluate(() => Math.round(100 *
+      document.querySelector('#console').getBoundingClientRect().height / innerHeight));
+    const collapsed = await conH();
+    check('console starts folded and leaves the map most of the screen',
+          collapsed < 40, `${collapsed}% of the viewport`);
+    check('search survives folding', await p.locator('#search').isVisible());
+    await p.click('#conToggle'); await p.waitForTimeout(250);
+    const open_ = await conH();
+    check('unfolding brings the date grid back', open_ > collapsed &&
+          await p.locator('#months').isVisible(), `${collapsed}% -> ${open_}%`);
+    await p.click('#conToggle'); await p.waitForTimeout(250);
+    // opens on the sampled date and half-hour nearest the device clock
+    const when = await p.evaluate(() => {
+      const n = new Date(), st = window.ombra.st;
+      const ti = Math.max(0, Math.min(31, Math.round((n.getHours() + n.getMinutes()/60 - 6) * 2)));
+      const dom = n.getDate();
+      let mo = n.getMonth(), day;
+      if (dom < 8) day = 1; else if (dom < 23) day = 15; else { day = 1; mo = (mo+1)%12; }
+      return { got:[st.mo, st.day, st.ti], want:[mo, day, ti] };
+    });
+    check('opens at the moment nearest now, not a hardcoded August',
+          JSON.stringify(when.got) === JSON.stringify(when.want),
+          `${when.got} vs ${when.want}`);
     // Zoom used to be scroll-only, and the wheel handler read deltaY as pixels -
     // so one Firefox notch (3 *lines*) zoomed by half a percent. The buttons are
     // the discoverable way in; they must survive the panel z-order too.
@@ -96,6 +121,15 @@ async function run(engine, label, breakStreams, which) {
     await p.click('#rFrom'); await p.waitForTimeout(200);
     check('empty picker stays open when tapped',
           await p.evaluate(() => document.querySelector('#rcard').classList.contains('picking')));
+    // two nested scrollers fought each other and showed three suggestions
+    const pick = await p.evaluate(() => {
+      const card = document.querySelector('#rcard'), list = document.querySelector('#rResults');
+      const row = document.querySelector('.res').getBoundingClientRect().height;
+      return { cardScrolls: card.scrollHeight > card.clientHeight + 1,
+               fits: Math.floor(list.clientHeight / row) };
+    });
+    check('the results list is the only thing that scrolls, and shows a useful number',
+          !pick.cardScrolls && pick.fits >= 6, `${pick.fits} suggestions visible`);
     await p.fill('#rSearch', 'Pantheon'); await p.waitForTimeout(200); await p.click('.res');
     await p.waitForTimeout(400);
     // answering "where are you now?" should ask "where are you going?" by itself

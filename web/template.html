@@ -164,6 +164,24 @@ button{cursor:pointer}
   margin-top:4px;font-weight:500}
 
 /* ---------- console ---------- */
+/* On a phone the console was 49% of the screen - the month grid alone is 101px -
+   and the map is the point. Collapsing folds the date grid and the search row
+   away and hands that back to the map; the clock, the scrubber, the search box
+   and the route button stay, because those are what you actually reach for.
+   Desktop has a whole sidebar and never needs it. */
+.contoggle{display:none}
+@media (max-width:859px){
+  .contoggle{display:flex;align-items:center;justify-content:center;gap:7px;
+    width:100%;padding:7px 0 9px;margin:-6px 0 -1px;border:0;background:none}
+  .contoggle span{width:34px;height:4px;border-radius:999px;background:var(--line)}
+  .contoggle i{font-style:normal;font-size:11px;color:var(--muted);line-height:1;
+    transition:transform .18s}
+  #console.collapsed .contoggle i{transform:rotate(180deg)}
+  /* Only the date grid folds. Hiding the search row with it bought another 5%
+     of the screen and cost you "Find a street", which is not a trade worth
+     making - and the date you are on is still readable in the clock. */
+  #console.collapsed #months{display:none}
+}
 #console{position:relative;z-index:6;background:var(--panel);border-top:1px solid var(--line);
   padding:10px 12px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -8px 24px rgba(0,0,0,.06)}
 .readrow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
@@ -277,6 +295,16 @@ tr.row:hover td{background:var(--panel-2)}
   font-size:14px;color:var(--ink-2);display:grid;place-items:center}
 #rpick{display:none;margin-top:10px}
 #rcard.picking #rpick{display:block}
+/* The picker had two scrollers inside each other - a 190px results list inside a
+   card that also scrolled - so on a phone three suggestions were visible and a
+   drag moved whichever one it felt like. While picking, the card claims the map
+   area and the list becomes the only thing that scrolls. */
+@media (max-width:859px){
+  #rcard.picking{top:12px;display:flex;flex-direction:column;overflow:hidden;
+    max-height:none}
+  #rcard.picking #rpick{flex:1;min-height:0;display:flex;flex-direction:column}
+  #rcard.picking #rResults{flex:1;min-height:0;max-height:none}
+}
 #rcard.picking #rsum{display:none}
 #rSearch{width:100%;padding:9px 11px;border-radius:9px;border:1px solid var(--line);
   background:var(--panel-2);font-size:13px}
@@ -447,6 +475,8 @@ tr.row:hover td{background:var(--panel-2)}
   </div>
 
   <div id="console">
+    <button class="contoggle" id="conToggle" aria-expanded="true"
+            aria-label="Hide the date picker"><span></span><i>&#9662;</i></button>
     <div class="readrow">
       <div class="clock"><span id="clkT">14:00</span> <span class="dim" id="clkD">15 Aug</span></div>
       <div class="sunfacts">
@@ -648,7 +678,37 @@ function view(buf, sec){
 }
 
 /* ---------- state ---------- */
-const st = {mo:7, day:15, ti:16, scale:1, cx:0, cy:0, sel:-1, hi:null, playing:false, raf:0,
+/* The map is sampled on the 1st and 15th, 06:00 to 21:30. Open on whichever of
+   those is closest to now, rather than a hardcoded August afternoon.
+   Deliberately the *device's* clock, not Rome's: every time on this page is Rome
+   civil time, but someone planning from six timezones away wants the hour they
+   are living in, not a city that is already dark. Reading Rome's clock instead
+   opened the map at 21:30 and black. Outside 06:00-21:30 it clamps to the
+   nearest end, which is honest - the clock in the corner says so. */
+function nowFrame(){
+  try{
+    const n = new Date();
+    let mo = n.getMonth(), dom = n.getDate();
+    const ti = Math.max(0, Math.min(31,
+                 Math.round((n.getHours() + n.getMinutes()/60 - 6) * 2)));
+    // nearest sampled date: the 1st, the 15th, or the 1st of next month
+    let day;
+    if(dom < 8) day = 1;
+    else if(dom < 23) day = 15;
+    else { day = 1; mo = (mo + 1) % 12; }
+    return {mo, day, ti};
+  }catch(e){ return {mo:7, day:15, ti:16}; }
+}
+const NOW = nowFrame();
+/* Every hour on this page is Rome's, and nothing said so. It does not need
+   saying to someone standing in Rome, where their clock and the map's agree -
+   only to someone reading it from another timezone, where the map opens on
+   their hour and means Rome's. */
+const AWAY = (()=>{ try{
+  return Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Rome"
+    ? "" : " · Rome time";
+}catch(e){ return " · Rome time"; } })();
+const st = {mo:NOW.mo, day:NOW.day, ti:NOW.ti, scale:1, cx:0, cy:0, sel:-1, hi:null, playing:false, raf:0,
             routing:false, a:-1, b:-1, k:1.2, route:null, refRoute:null,
             aL:"", bL:"", pick:null, mapPick:null};
 const dateIdx = () => st.mo*2 + (st.day===15?1:0);
@@ -863,7 +923,7 @@ function computeCityAvg(){
 function updateReadouts(){
   const fi = frameIndex(), m = H.frames[fi];
   $("#clkT").textContent = fmtTime(st.ti);
-  $("#clkD").textContent = dayLabel() + " " + MONTH[st.mo];
+  $("#clkD").textContent = dayLabel() + " " + MONTH[st.mo] + AWAY;
   const up = m.el > 0;
   $("#sunEl").textContent = up ? Math.round(m.el)+"\u00b0" : "down";
   $("#sunAz").textContent = up ? COMPASS(m.az) : "\u2014";
@@ -1673,6 +1733,26 @@ $("#btnPlay").addEventListener("click", ()=>{
   st.raf=setInterval(()=>{ st.ti=(st.ti+1)%32; updateReadouts(); drawLines(); drawOver(); }, 190);
   renderList();
 });
+/* Collapsed by default on a phone, and remembered: someone who wants the map
+   big wants it big every time. Storage throws in a private window, so every
+   access is guarded and the default survives it. */
+const CON_KEY = "ombra.console";
+function setConsole(collapsed){
+  const con = $("#console"), btn = $("#conToggle");
+  con.classList.toggle("collapsed", collapsed);
+  btn.setAttribute("aria-expanded", String(!collapsed));
+  btn.setAttribute("aria-label", collapsed ? "Show the date picker" : "Hide the date picker");
+  resize();                       // the map just got taller or shorter
+}
+let conCollapsed = true;
+try{ const v = localStorage.getItem(CON_KEY); if(v!==null) conCollapsed = v==="1"; }catch(e){}
+setConsole(conCollapsed);
+$("#conToggle").addEventListener("click", ()=>{
+  conCollapsed = !conCollapsed;
+  try{ localStorage.setItem(CON_KEY, conCollapsed ? "1" : "0"); }catch(e){}
+  setConsole(conCollapsed);
+});
+
 $("#btnZin").addEventListener("click",  ()=> zoomStep(1.7));
 $("#btnZout").addEventListener("click", ()=> zoomStep(1/1.7));
 $("#btnZfit").addEventListener("click", fitAll);
