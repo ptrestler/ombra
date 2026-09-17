@@ -1163,9 +1163,10 @@ rather than just take it on faith.</li>
 <h3>Where the data comes from</h3>
 <ul>
 <li><b>__NBLD__ buildings</b> from OpenStreetMap. <b>__NKNOWN__</b> carry a real height or
-floor count. Another <b>__NCAD__</b> are matched to the Italian cadastre, via EUBUCCO \u2014
-a measured height rather than a guess. The remaining <b>__NIMP__</b> are interpolated from
-their tagged neighbours, weighted by distance.</li>
+floor count. Another <b>__NCAD__</b> take theirs from the Italian cadastre, via EUBUCCO \u2014
+the surveyed parcels that fall inside the building's own outline, so a measured height
+rather than a guess. The remaining <b>__NIMP__</b> are interpolated from their tagged
+neighbours, weighted by distance.</li>
 <li><b>4,800 mapped trees</b>, 215 tree rows and the wooded parts of parks, modelled as
 9\u201311 m canopy. Tree mapping is patchy, so some leafy streets score drier than they feel.</li>
 <li><b>Terrain</b> from the AWS Open Data terrain tiles (SRTM-derived, ~30&nbsp;m),
@@ -1205,12 +1206,13 @@ edge of the map. Start and end points snap to the connected part, which can be a
 metres from where you tapped.</li>
 <li>No crossings, traffic lights, steps-versus-ramp or one-way logic \u2014 it routes as the
 crow walks.</li>
-<li><b>The city-wide numbers are solid. A single street may not be.</b> Two thirds of the
-buildings have a height somebody measured; the rest are interpolated, at about
-<b>5.5&nbsp;m</b> of error. Put that error back through the model and 94% of the map does
-not move at all \u2014 but what moves, moves hard: <b>one reading in seventeen</b> shifts by
-more than ten percentage points, and nothing on the map tells you which one. Ray blocking
-is a threshold, so a few metres either changes nothing or changes everything.</li>
+<li><b>The city-wide numbers are solid. A single street may not be.</b> Three quarters of
+the buildings have a height somebody measured; the rest are interpolated from their
+neighbours, at about <b>7&nbsp;m</b> of error. Put that error back through the model and
+94% of the map does not move at all \u2014 but what moves, moves hard: <b>one reading in
+eighteen</b> shifts by more than ten percentage points, and nothing on the map tells you
+which one. Ray blocking is a threshold, so a few metres either changes nothing or
+changes everything.</li>
 </ul>
 
 <h3>Using it</h3>
@@ -1236,9 +1238,9 @@ function openSheet(tab){
      .replace("__NEDGE__", H.nedge ? H.nedge.toLocaleString("en") : "54,530")
      .replace("__NBLD__", H.nbld ? H.nbld.toLocaleString("en") : "14,158")
      .replace("__NKNOWN__", H.nknown ? H.nknown.toLocaleString("en") : "2,443")
-     .replace("__NCAD__", H.ncad ? H.ncad.toLocaleString("en") : "7,140")
+     .replace("__NCAD__", H.ncad ? H.ncad.toLocaleString("en") : "8,180")
      .replace("__NIMP__", (H.nbld && H.nknown && H.ncad)
-        ? (H.nbld - H.nknown - H.ncad).toLocaleString("en") : "4,575")
+        ? (H.nbld - H.nknown - H.ncad).toLocaleString("en") : "3,535")
      // counted off the payload rather than typed in: the street total read
      // "2,088" for several rebuilds after it was really 2,067
      .replace("__NPLACE__", H.pl ? H.pl.length.toLocaleString("en") : "872")

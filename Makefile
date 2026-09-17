@@ -2,7 +2,7 @@
 # Stages are ordered; each depends on the one above. `make` builds everything.
 PY := python3
 
-.PHONY: all fetch rasters shade web artifact test clean distclean
+.PHONY: all fetch rasters shade web artifact test heights clean distclean
 
 all: web
 
@@ -14,7 +14,7 @@ fetch:
 
 ## rasters -- 2 m building/canopy grid, 10 m terrain grid
 rasters: build/dsm.npy build/ground.npy
-build/dsm.npy: build_dsm.py heights.py geo.py data/eubucco/rome.csv
+build/dsm.npy: build_dsm.py heights.py buildings.py geo.py data/eubucco/rome.csv
 	$(PY) build_dsm.py
 build/ground.npy: build/terr.npy ground.py
 	$(PY) ground.py
@@ -43,6 +43,11 @@ build/artifact.html: build/data.b64 web/template.html build_artifact.py
 test:
 	$(PY) tests/validate.py
 	node tests/smoke.mjs
+
+## heights -- score the height sources against the OSM tags; prints the tables
+## that heights.py and CLAUDE.md quote. Reads data/, not build/.
+heights:
+	$(PY) measure_heights.py
 
 clean:                      ## derived files only; keeps the downloaded data
 	rm -rf build dist

@@ -15,6 +15,7 @@ npx playwright install chromium webkit    # both; make test needs WebKit too
 make            # full build (data is cached, so ~10 min)
 make artifact   # build/artifact.html, the file you publish as an Artifact
 make test       # needs a build first; model + browser checks (Chromium, WebKit)
+make heights    # score every height source against the OSM tags; needs data/ only
 make clean      # drop derived files, keep downloads
 ```
 
@@ -43,7 +44,13 @@ so scripts run from any directory.
 
 Supporting modules: `geo.py` (local metre projection), `solar.py` (NOAA solar
 position), `heights.py` (OSM height tags → metres, plus the cadastre lookup),
+`buildings.py` (the outlines, shared by the build and the report),
 `streets.py` (segmentation).
+
+Two scripts that measure rather than build, neither on the `make` path:
+`measure_heights.py` (`make heights`) scores every height source against the OSM
+tags and prints the tables `heights.py` quotes; `compare_frames.py` diffs two
+`build/frames.npy` so a model change can be seen rather than assumed.
 
 ## How the shade model works
 
@@ -112,15 +119,20 @@ the data wiring, not the model's sensitivity: a change that wrecks one street in
 seventeen passes them clean. When you touch the model, diff `build/frames.npy`
 against the old one rather than trusting the named streets.
 
-**The cadastre match radius is load-bearing.** `heights.py` accepts a EUBUCCO
-height only when its centroid lands within 8 m of ours. That is not a rounding
-tolerance, it is where the data stops being better than the interpolation it
-replaces. EUBUCCO subdivides blocks more finely than OSM does, so past about
-10 m the nearest centroid is usually the building next door: widening to 12 m
-lifts coverage from 61 % to 74 % and pushes the error *above* what interpolation
-achieves on the same buildings. The measured table is in `heights.py`. The
-−1.36 m offset next to it is fitted, not assumed — re-measure both if you touch
-either, and never move one by eye.
+**Nothing about the cadastre match is a free parameter — `make heights` is how
+you find out.** `heights.py` matches by containment: a cadastre parcel belongs
+to a building when its centroid falls inside that building's own outline. That
+is the relationship the two datasets have, because the cadastre splits a block
+into parcels where OSM draws one outline. An 8 m nearest-centroid radius is kept
+as a fallback for the other direction — outlines OSM draws more finely than the
+cadastre, which contain no parcel at all — and that radius is *not* a rounding
+tolerance: it is where the data stops beating the interpolation it replaces. It
+was re-tested after containment went in and got tighter, not looser. The +1.00 m
+offset is fitted, and five-fold cross validated. Every one of those numbers comes
+out of `measure_heights.py`, which scores the shipped `cadastre_heights` against
+the 2,443 OSM-tagged buildings — run it, read it, and paste what it says. Never
+move one of these by eye, and never quote a number this file already carries
+without re-deriving it.
 
 **The standalone is useless inside a document previewer, and that is not
 fixable.** Opened from iOS Files (Quick Look) it suspends the JavaScript partway
@@ -254,35 +266,50 @@ segment's shade over consecutive half-hours is smooth.
 |---|---|
 | Relief error vs known heights | **9.8 m** (flat-earth model was 44.9 m) |
 | Buildings with a real OSM height | 2,443 of 14,158 |
-| …matched to the Lazio cadastre instead | 7,140 more — 61 % of the untagged |
-| …still interpolated from neighbours | 4,575, the ones neither source reaches |
-| Error of the cadastre heights | **RMSE 5.01 m**, MAE 3.53 m, bias +0.00 m — against the OSM tags, on the 1,620 buildings that have both. Interpolation scored 5.50 m on those same buildings |
-| Error of the interpolation that is left | RMSE 6.42 m, MAE 4.40 m (n = 823). The buildings the cadastre misses are the harder ones, so this is worse than the 5.83 m the old build averaged |
-| Error of every non-tagged height | **RMSE 5.53 m**, MAE 3.83 m, bias +0.04 m — was 5.83 m / 4.19 m |
-| Shade's sensitivity to that error | 94.1 % of segment-frames unmoved, city mean shifts 0.36 pp — but 5.9 % move by >10 pp |
+| …matched to the Lazio cadastre instead | 8,180 more — 70 % of the untagged |
+| …still interpolated from neighbours | 3,535, the ones neither source reaches |
+| Error of the cadastre heights | **RMSE 4.90 m**, MAE 3.46 m, bias −0.00 m — against the OSM tags, on the 1,996 buildings that have both. Interpolation scored 5.53 m on those same buildings |
+| Error of the interpolation that is left | RMSE 6.94 m, MAE 4.70 m (n = 447). The buildings the cadastre cannot reach are the hardest ones, so this number gets *worse* every time the matching gets better |
+| Error of every non-tagged height | **RMSE 5.33 m**, MAE 3.69 m, bias +0.19 m — was 5.53 m / 3.83 m |
+| Shade's sensitivity to that error | 94.5 % of segment-frames unmoved, city mean shifts 0.29 pp — but 5.5 % move by >10 pp |
 | Walking network | 54,530 links, ~988 km, 97 % one connected component |
 | Median detour index | 1.22 (healthy pedestrian networks are 1.20–1.35) |
 | Sunrise/sunset vs published | within 4 min at both solstices and the equinox |
 
 **Height error does not average out, it concentrates.** Perturbing every
-non-tagged height by its own measured error (σ = 5.01 m for the cadastre ones,
-6.42 m for the interpolated) leaves 94.1 % of the 30.4 M segment-frame values
-*bit-identical* and moves the city-wide mean shade by 0.36 pp. The 5.9 % that do
-move, move hard: >1 pp, >5 pp and >10 pp are all the same 5.9 % of values, and
-3.7 % move by more than 20 pp. Ray blocking is a threshold — a few metres either
+non-tagged height by its own measured error (σ = 4.90 m for the cadastre ones,
+6.94 m for the interpolated) leaves 94.5 % of the 30.4 M segment-frame values
+*bit-identical* and moves the city-wide mean shade by 0.29 pp. The 5.5 % that do
+move, move hard: >1 pp, >5 pp and >10 pp are all the same 5.5 % of values, and
+3.4 % move by more than 20 pp. Ray blocking is a threshold — a few metres either
 does not change whether the sun is occluded, or changes it completely. So the
 aggregate numbers are robust and individual streets are not, which is the
-opposite of what "a third of the heights are estimated" suggests.
+opposite of what "a quarter of the heights are estimated" suggests.
 
-**Adding the cadastre did not change that shape, and was not expected to.**
-Before it, the same test moved 5.5 % of values; after, 5.9 %. Fewer heights are
-now guessed and the guesses that remain are better measured, but the fraction of
-the map that sits near a blocking threshold is a property of Rome's geometry,
-not of the height data. Switching the cadastre on moved 5.0 % of segment-frames
-and the city mean by −0.80 pp — the same order as the noise above, so **the diff
-alone does not show the map got better.** The case for it is the measurement:
-5.01 m against 5.50 m on the same 1,620 buildings, and a height that was
-surveyed rather than inferred from the neighbours.
+That paragraph is re-derivable, and should be re-derived rather than copied:
+`OMBRA_JITTER=<seed> python build_dsm.py && python shade.py` builds the same map
+with every estimate moved by its own σ, and `compare_frames.py` diffs it against
+the real one. Call the two scripts, not `make`: the grid is already up to date as
+far as make is concerned, so it would skip the rebuild and diff a map against
+itself. The
+σ values it uses live in `heights.py` next to the matching rules, so they go
+stale together or not at all.
+
+**Neither cadastre change moved that shape, and neither was expected to.** The
+same test moved 5.5 % of values before the cadastre went in, 5.9 % after it, and
+5.5 % again once matching moved to containment. Fewer heights are guessed each
+time and the guesses that remain are better measured, but the fraction of the map
+sitting near a blocking threshold is a property of Rome's geometry, not of the
+height data.
+
+**And the diff alone never shows the map got better.** Switching the cadastre on
+moved 5.0 % of segment-frames and the city mean by −0.80 pp; switching to
+containment moved 3.5 % and +0.29 pp. Both are the same order as the noise above,
+so a diff can only tell you *how much* changed, never whether it improved. The
+case each time is the measurement against the OSM tags — for containment, 4.65 m
+against 5.02 m on the 1,620 buildings both rules reach, bootstrap interval
+[−0.71, −0.16] — plus 1,040 more buildings whose height was surveyed instead of
+inferred from the neighbours.
 
 **The elevation data is a surface model, not bare earth** — buildings are baked
 in, so the dense centre reads ~12 m high and hill-to-valley relief is compressed

@@ -1,9 +1,10 @@
-import json, glob, math, numpy as np, os
+import json, math, numpy as np, os
 from paths import osm, dem, eub, build, web, dist
 from PIL import Image, ImageDraw
 from scipy.spatial import cKDTree
 from geo import to_xy
-from heights import building_height, cadastre_heights
+from heights import cadastre_heights, CADASTRE_RMSE_M, INTERP_RMSE_M
+from buildings import load as load_buildings, rings   # rings: the wooded areas below
 
 RES=2.0
 S,W,N,E = 41.878, 12.4500, 41.9150, 12.5100
@@ -11,39 +12,18 @@ x0,y0 = to_xy(W,S); x1,y1 = to_xy(E,N)
 NX=int(math.ceil((x1-x0)/RES)); NY=int(math.ceil((y1-y0)/RES))
 def px(x,y): return ((x-x0)/RES,(y1-y)/RES)
 
-def rings(el):
-    if el["type"]=="way":
-        g=el.get("geometry")
-        if g and len(g)>=3: yield [(p["lon"],p["lat"]) for p in g]
-    else:
-        for m in el.get("members",[]):
-            if m.get("type")=="way" and m.get("role") in ("outer",""):
-                g=m.get("geometry")
-                if g and len(g)>=3: yield [(p["lon"],p["lat"]) for p in g]
-
-blds=[]; seen=set()
-for fn in sorted(glob.glob(osm("tiles/bld_*.json"))):
-    for el in json.load(open(fn))["elements"]:
-        k=(el["type"],el["id"])
-        if k in seen: continue
-        seen.add(k)
-        t=el.get("tags",{}) or {}
-        h,src=building_height(t)
-        rr=list(rings(el))
-        if not rr: continue
-        allpts=[p for r in rr for p in r]
-        cx=sum(p[0] for p in allpts)/len(allpts); cy=sum(p[1] for p in allpts)/len(allpts)
-        blds.append(dict(h=h,src=src,rings=rr,c=(cx,cy)))
-
+blds = load_buildings()
 known=[b for b in blds if b["src"] in ("tag","levels")]
 unk  =[b for b in blds if b["src"]=="default"]
 print("buildings",len(blds),"known",len(known),"untagged",len(unk))
 ncad=0
 if known:
-    # An untagged building gets a real cadastre height if one sits close enough,
-    # and an interpolated one otherwise. OSM tags always win over both: they are
-    # the yardstick everything else was measured against. See heights.py.
-    CH = cadastre_heights(eub("rome.csv"),
+    # An untagged building gets a real cadastre height if the cadastre reaches
+    # it -- by the parcels inside its own outline, or failing that the nearest
+    # parcel centroid -- and an interpolated one otherwise. OSM tags always win
+    # over both: they are the yardstick everything else was measured against.
+    # See heights.py.
+    CH = cadastre_heights(eub("rome.csv"), [b["rings"] for b in unk],
                           [b["c"][0] for b in unk], [b["c"][1] for b in unk])
 
     KX,KY = to_xy([b["c"][0] for b in known],[b["c"][1] for b in known])
@@ -73,6 +53,21 @@ if known:
                     ("all untagged", unk)):
         hh=np.array([b["h"] for b in sel])
         print(f"  {lbl:<13} median {np.median(hh):5.1f}  p10 {np.percentile(hh,10):5.1f}  p90 {np.percentile(hh,90):5.1f}")
+
+# How much of the map rests on the estimates? Set OMBRA_JITTER=<seed> and every
+# estimated height moves by its own measured error, so the frames this produces
+# can be diffed against the real ones. The claim in the UI's methodology panel
+# comes from that diff, and this is the only way to re-derive it. A build with
+# no such variable set is untouched.
+seed = os.environ.get("OMBRA_JITTER")
+if seed:
+    rng = np.random.default_rng(int(seed))
+    for b in blds:
+        if b["src"] == "cadastre":  sd = CADASTRE_RMSE_M
+        elif b["src"] == "default": sd = INTERP_RMSE_M
+        else:                       continue         # a tag is not an estimate
+        b["h"] = float(max(2.0, b["h"] + rng.normal(0.0, sd)))
+    print(f"  JITTERED with seed {seed}: this build is a sensitivity probe, not a map")
 
 img=Image.new("I;16",(NX,NY),0); d=ImageDraw.Draw(img)
 for b in blds:
