@@ -63,6 +63,33 @@ async function run(engine, label, breakStreams, which) {
     await p.fill('#search', 'Via Giulia'); await p.press('#search', 'Enter');
     await p.waitForTimeout(500);
     check('street search', (await p.textContent('#cName')) === 'Via Giulia');
+    // The field used to match only on Enter, on the first substring it found in
+    // map order. Rome has hundreds of streets that start the same way.
+    await p.fill('#search', 'Via dei Co'); await p.waitForTimeout(250);
+    const sug = await p.evaluate(() => [...document.querySelectorAll('#sugg .sg')]
+      .map(b => b.textContent.trim()));
+    check('typing suggests streets', sug.length > 1 && sug.length <= 8,
+          sug.slice(0, 3).join(' | '));
+    check('and every one of them matches what was typed',
+          sug.every(n => n.toLowerCase().includes('via dei co')));
+    await p.press('#search', 'ArrowDown'); await p.press('#search', 'ArrowDown');
+    const picked = await p.evaluate(() =>
+      document.querySelector('#sugg .sg[aria-selected="true"]').textContent.trim());
+    await p.press('#search', 'Enter'); await p.waitForTimeout(400);
+    check('arrow keys and Enter take the one you chose',
+          (await p.textContent('#cName')) === picked, picked);
+    check('and the list closes behind it',
+          await p.evaluate(() => document.querySelector('#sugg').hidden));
+    await p.fill('#search', 'Via dei Co'); await p.waitForTimeout(250);
+    await p.press('#search', 'Escape'); await p.waitForTimeout(150);
+    check('Escape dismisses the suggestions',
+          await p.evaluate(() => document.querySelector('#sugg').hidden));
+    await p.fill('#search', 'Margutta'); await p.waitForTimeout(250);
+    await p.click('#sugg .sg'); await p.waitForTimeout(400);
+    check('and tapping one works on a phone',
+          /Margutta/.test(await p.textContent('#cName')),
+          await p.textContent('#cName'));
+    await p.click('#cClose'); await p.waitForTimeout(200);
     // The console was 49% of a phone screen. The date grid folds away, and the
     // search box must not go with it - that regression cost "Find a street".
     const conH = () => p.evaluate(() => Math.round(100 *

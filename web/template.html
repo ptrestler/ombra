@@ -255,9 +255,27 @@ button{cursor:pointer}
    It is the app's second job, so it gets a full-width button with its name on it. */
 .btn.route{width:100%;margin-top:7px;justify-content:center;padding:10px 13px;font-size:13px}
 .btn.route[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:transparent}
-#search{flex:1;min-width:0;padding:9px 11px;border-radius:10px;border:1px solid var(--line);
+#search{width:100%;padding:9px 11px;border-radius:10px;border:1px solid var(--line);
   background:var(--panel-2);font-size:12.5px}
 #search::placeholder{color:var(--muted)}
+/* The field was submit-only: you typed a whole name, pressed Enter, and a near
+   miss emptied the box. The list is what makes it a search.
+   It opens upward on a phone, where the console sits on the bottom edge and the
+   keyboard takes everything below, and downward in the desktop sidebar, which
+   scrolls and would clip anything reaching above it. */
+.searchwrap{position:relative;flex:1;min-width:0}
+#sugg{position:absolute;left:0;right:0;bottom:100%;margin-bottom:6px;z-index:9;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  box-shadow:var(--shadow);overflow:auto;max-height:198px;
+  -webkit-overflow-scrolling:touch}
+#sugg[hidden]{display:none}
+.sg{display:block;width:100%;text-align:left;padding:9px 11px;border:none;
+  background:transparent;font-size:12.5px;color:var(--ink);
+  border-bottom:1px solid var(--line)}
+.sg:last-child{border-bottom:none}
+.sg em{font-style:normal;font-weight:700}
+.sg[aria-selected="true"]{background:var(--panel-2)}
+@media (min-width:860px){ #sugg{bottom:auto;top:100%;margin:6px 0 0} }
 
 /* ---------- sheet ---------- */
 #sheet{position:absolute;inset:0;z-index:8;background:var(--panel);display:none;
@@ -554,7 +572,12 @@ tr.row:hover td{background:var(--panel-2)}
 
     <div class="actions">
       <button class="btn primary" id="btnPlay">&#9654; Play day</button>
-      <input id="search" type="search" placeholder="Find a street&#8230;" aria-label="Find a street">
+      <div class="searchwrap">
+        <input id="search" type="search" placeholder="Find a street&#8230;" aria-label="Find a street"
+               role="combobox" aria-expanded="false" aria-controls="sugg" aria-autocomplete="list"
+               autocomplete="off">
+        <div id="sugg" role="listbox" aria-label="Matching streets" hidden></div>
+      </div>
     </div>
 
     <button class="btn route" id="btnRoute" aria-pressed="false">
@@ -2135,14 +2158,93 @@ $("#cClose").addEventListener("click", clearSel);
 $("#tabShade").addEventListener("click", ()=>openSheet("shade"));
 $("#tabSun").addEventListener("click", ()=>openSheet("sun"));
 $("#tabHow").addEventListener("click", ()=>openSheet("how"));
+/* ---------- street suggestions ---------- */
+/* Typing a street used to be a guess with one shot at it: the field only matched
+   on Enter, took whatever substring it found first in map order, and emptied the
+   box on a near miss. Rome has 2,000 street names and plenty of them start the
+   same way, so the list is the feature - the Enter key just takes the top of it.
+   Ranking is the route picker's: a whole name first, then names that start with
+   what you typed, then the rest, shortest first. */
+const SUG_MAX = 8;
+let sugRows = [], sugAt = -1;
+
+function streetSuggest(q){
+  const n = norm(q);
+  if(!n) return [];
+  const out = [];
+  for(const t of STN){
+    const at = t.q.indexOf(n);
+    if(at < 0) continue;
+    out.push({n: t.n, at, exact: t.q === n});
+    if(out.length > 400) break;          // enough to rank; nobody reads 400
+  }
+  out.sort((a,b)=> (b.exact?1:0)-(a.exact?1:0) || a.at-b.at ||
+                   a.n.length-b.n.length || a.n.localeCompare(b.n));
+  return out.slice(0, SUG_MAX);
+}
+
+function closeSugg(){
+  sugRows = []; sugAt = -1;
+  const box=$("#sugg"); box.hidden = true; box.innerHTML = "";
+  $("#search").setAttribute("aria-expanded","false");
+}
+
+function markSugg(){
+  $("#sugg").querySelectorAll(".sg").forEach((b,i)=>{
+    b.setAttribute("aria-selected", i===sugAt ? "true" : "false");
+    if(i===sugAt && b.scrollIntoView) b.scrollIntoView({block:"nearest"});
+  });
+}
+
+function renderSugg(q){
+  sugRows = streetSuggest(q); sugAt = -1;
+  const box = $("#sugg");
+  if(!sugRows.length){ closeSugg(); return; }
+  const nq = norm(q);
+  box.innerHTML = sugRows.map((r,i)=>{
+    let nm = r.n;
+    const at = norm(nm).indexOf(nq);
+    if(at>=0) nm = nm.slice(0,at)+"<em>"+nm.slice(at,at+nq.length)+"</em>"+nm.slice(at+nq.length);
+    return '<button class="sg" role="option" aria-selected="false" data-i="'+i+'">'+nm+'</button>';
+  }).join("");
+  box.hidden = false;
+  $("#search").setAttribute("aria-expanded","true");
+  box.querySelectorAll(".sg").forEach(btn=>{
+    // pointerdown, not click: the field blurs on click and would close the list
+    // out from under the tap that chose it
+    btn.addEventListener("pointerdown", ev=>{ ev.preventDefault(); takeSugg(+btn.dataset.i); });
+  });
+}
+
+function takeSugg(i){
+  const r = sugRows[i]; if(!r) return;
+  $("#search").value = r.n;
+  closeSugg();
+  $("#search").blur();
+  selectName(r.n);
+}
+
+$("#search").addEventListener("input", e=>{
+  e.target.placeholder = "Find a street\u2026";   // clear any "no street matched"
+  renderSugg(e.target.value.trim());
+});
+$("#search").addEventListener("focus", e=>{ if(e.target.value.trim()) renderSugg(e.target.value.trim()); });
+$("#search").addEventListener("blur", ()=> setTimeout(closeSugg, 120));
 $("#search").addEventListener("keydown", e=>{
+  if(e.key==="ArrowDown" || e.key==="ArrowUp"){
+    if(!sugRows.length) return;
+    e.preventDefault();
+    const d = e.key==="ArrowDown" ? 1 : -1;
+    sugAt = sugAt < 0 ? (d > 0 ? 0 : sugRows.length-1)
+                      : (sugAt + d + sugRows.length) % sugRows.length;
+    markSugg();
+    return;
+  }
+  if(e.key==="Escape"){ if(!$("#sugg").hidden){ e.stopPropagation(); closeSugg(); } return; }
   if(e.key!=="Enter") return;
-  const q=e.target.value.trim().toLowerCase(); if(!q) return;
-  let hit=null;
-  for(const nm of nameIndex.keys()) if(nm.toLowerCase()===q){hit=nm;break;}
-  if(!hit) for(const nm of nameIndex.keys()) if(nm.toLowerCase().includes(q)){hit=nm;break;}
-  if(hit){ selectName(hit); e.target.blur(); }
-  else { e.target.value=""; e.target.placeholder="No street matched \u2014 try again"; }
+  const q=e.target.value.trim(); if(!q) return;
+  if(sugRows.length){ takeSugg(sugAt<0 ? 0 : sugAt); return; }
+  e.target.value=""; e.target.placeholder="No street matched \u2014 try again";
 });
 window.addEventListener("resize", resize);
 /* ---------- light / dark ---------- */
