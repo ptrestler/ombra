@@ -368,8 +368,6 @@ tr.row:hover td{background:var(--panel-2)}
   #rcard.picking #rResults{flex:1;min-height:0;max-height:none}
 }
 #rcard.picking #rsum{display:none}
-#rSearch{width:100%;padding:9px 11px;border-radius:9px;border:1px solid var(--line);
-  background:var(--panel-2);font-size:13px}
 .pickacts{display:flex;gap:5px;margin-top:7px}
 .pk{flex:1;padding:7px 8px;border-radius:9px;border:1px solid var(--line);background:transparent;
   font-size:11.5px;font-weight:600;color:var(--ink-2)}
@@ -502,7 +500,6 @@ tr.row:hover td{background:var(--panel-2)}
       </div>
 
       <div id="rpick">
-        <input id="rSearch" type="search" placeholder="Search a place or street" aria-label="Search a place or street">
         <div class="pickacts">
           <button class="pk" id="pickGeo">Use my location</button>
           <button class="pk" id="pickMap">Pick on the map</button>
@@ -1822,11 +1819,12 @@ function openPick(which){
   $("#rFrom").setAttribute("aria-expanded", which==="a");
   $("#rTo").setAttribute("aria-expanded", which==="b");
   $("#pickMap").setAttribute("aria-pressed","false");
-  const inp=$("#rSearch");
-  inp.value=""; inp.placeholder = "Search places and streets";
   applyGeoStatus(); renderResults(""); renderRoute();
-  if(!matchMedia("(hover: none)").matches) setTimeout(()=>inp.focus(),30);
 }
+/* Only ever called with an empty query now that the picker has no search field:
+   that is the shortlist. The query path is kept because `searchDest` still ranks
+   it and `window.ombra` still exposes it, and because putting the field back is
+   then one input and one listener. */
 function renderResults(q){
   const rows=searchDest(q);
   const box=$("#rResults");
@@ -2125,18 +2123,21 @@ $("#btnRoute").addEventListener("click", ()=> st.routing ? closeRoute() : openRo
 $("#rClose").addEventListener("click", closeRoute);
 // The card opens with the A picker already showing, so a plain toggle made the
 // first tap on "Where are you now?" close the search instead of answering it.
-// Collapse only when that end is already set; otherwise refocus, and never wipe
-// what has been typed.
+// Collapse only when that end is already set. Tapping the end it is already
+// asking about is not a request to close the thing you are answering - but if
+// "pick on the map" has replaced the list with its own note, that tap is the way
+// back to the list. Without this the mode is a dead end: the field that used to
+// redraw the list when you typed in it is gone.
 const pickTap = (which, has) => () => {
   if(st.pick!==which) return openPick(which);
-  if(has()){ st.pick=null; renderRoute(); } else $("#rSearch").focus();
+  if(has()){ st.pick=null; renderRoute(); return; }
+  if(st.mapPick) openPick(which);
 };
 $("#rFrom").addEventListener("click", pickTap("a", ()=>st.aL));
 $("#rTo").addEventListener("click",   pickTap("b", ()=>st.bL));
 $("#rSwap").addEventListener("click", ()=>{
   const a=st.a,al=st.aL; st.a=st.b; st.aL=st.bL; st.b=a; st.bL=al;
   st.pick=null; recompute(); renderRoute(); schedule(false); });
-$("#rSearch").addEventListener("input", e=>renderResults(e.target.value));
 $("#pickGeo").addEventListener("click", useGeo);
 $("#pickMap").addEventListener("click", startMapPick);
 document.querySelectorAll(".rm").forEach(b=>b.addEventListener("click", ()=>{

@@ -177,16 +177,20 @@ async function run(engine, label, breakStreams, which) {
                fits: Math.floor(list.clientHeight / row),
                mapPct: Math.round((c.top - stage.top) / stage.height * 100),
                consoleGone: getComputedStyle(document.querySelector('#console')).display === 'none',
+               rows: document.querySelectorAll('#rResults .res').length,
                zoom: getComputedStyle(z).display !== 'none' &&
                      z.getBoundingClientRect().bottom <= c.top + 1 };
     });
     check('the results list is the only thing that scrolls, and shows a useful number',
           !pick.cardScrolls && pick.fits >= 5, `${pick.fits} suggestions visible`);
+    // with the search field gone the shortlist is the only way in besides the map
+    check('the shortlist still offers the landmarks', pick.rows >= 20, `${pick.rows} places`);
     check('and the map is still there to look at', pick.mapPct >= 35,
           `${pick.mapPct}% of the map area`);
     check('the console steps aside to pay for it', pick.consoleGone);
     check('the zoom controls stay above the sheet', pick.zoom);
-    await p.fill('#rSearch', 'Pantheon'); await p.waitForTimeout(200); await p.click('.res');
+    // the shortlist is the picker now, so the ends are chosen straight off it
+    await p.locator('.res', { hasText: 'Pantheon' }).first().click();
     await p.waitForTimeout(400);
     // answering "where are you now?" should ask "where are you going?" by itself
     check('picking the start moves straight on to the destination',
@@ -205,8 +209,13 @@ async function run(engine, label, breakStreams, which) {
       const c = document.querySelector('#rcard').getBoundingClientRect();
       return (c.top - stage.top) / stage.height > 0.5;
     }));
-    await p.click('#rTo'); await p.fill('#rSearch', 'Colosseo'); await p.waitForTimeout(200);
-    await p.click('.res'); await p.waitForTimeout(600);
+    // and tapping the end it is already asking about is the way out of that mode
+    await p.click('#rTo'); await p.waitForTimeout(250);
+    check('tapping the open end again leaves map-pick for the list',
+          await p.evaluate(() => !window.ombra.st.mapPick &&
+            document.querySelectorAll('#rResults .res').length > 0));
+    await p.locator('.res', { hasText: 'Colosseo' }).first().click();
+    await p.waitForTimeout(600);
     const km = await p.textContent('#rTitle');
     check('routes Pantheon to Colosseo', /km/.test(km), km);
     check('shows the shortest-route comparison',
