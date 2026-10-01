@@ -260,6 +260,30 @@ async function run(engine, label, breakStreams, which) {
     await p.click('#btnTheme'); await p.waitForTimeout(250); const t2 = await gnd();
     check('theme toggle alternates', t0 !== t1 && t1 !== t2 && t0 === t2, `${t0} ${t1} ${t2}`);
     // the phone route panel fills the upper map, so the zoom stack steps aside
+    // Nasoni: counted along the route, and the line only speaks when it has
+    // something to act on, because it costs a line of card and the card costs map
+    const naso = await p.evaluate(() => {
+      const o = window.ombra, n = o.st.route.naso;
+      return { all: o.head.nnaso, on: n.n, gap: Math.round(n.gap),
+               line: document.querySelector('#rNaso').textContent.trim(),
+               legend: document.querySelector('#legend').classList.contains('naso') };
+    });
+    check('the payload carries the fountains', naso.all > 300, `${naso.all} nasoni`);
+    // a projection or quantisation slip would put them in the Tyrrhenian Sea
+    check('and puts them inside the map', await p.evaluate(() => {
+      const o = window.ombra, d = o.data, bb = o.head.bbox;
+      for (let i = 0; i < d.naX.length; i++)
+        if (d.naX[i] < bb.x0 || d.naX[i] > bb.x1 ||
+            d.naY[i] < bb.y0 || d.naY[i] > bb.y1) return false;
+      return d.naX.length === o.head.nnaso;
+    }));
+    check('and picks out the ones along a route',
+          naso.on > 0 && naso.on < naso.all, `${naso.on} on the way, driest ${naso.gap} m`);
+    check('the dry-stretch line speaks only when the stretch is long',
+          naso.gap >= 400 ? /dry stretch/.test(naso.line) : naso.line === '',
+          naso.line || '(silent, as it should be)');
+    check('the legend explains them while they are on the map', naso.legend);
+
     // the route card carries its own scrubber, and it is about this route
     check('the console stays out of the way while the route is up',
           await p.evaluate(() => getComputedStyle(document.querySelector('#console')).display === 'none'));
@@ -283,6 +307,15 @@ async function run(engine, label, breakStreams, which) {
     check('no stale-build prompt from a file:// copy',
           await p.evaluate(() => document.querySelector('#fresh').hidden));
     await p.click('#rClose'); await p.waitForTimeout(350);
+    // 460 taps over the whole city is not a map; they wait for the zoom
+    check('no fountains on the city-wide view', await p.evaluate(() =>
+      !document.querySelector('#legend').classList.contains('naso')));
+    await p.evaluate(() => { window.ombra.st.scale = 0.5; });
+    await p.click('#btnZin'); await p.waitForTimeout(300);
+    check('and fountains once you zoom in to a walk', await p.evaluate(() =>
+      document.querySelector('#legend').classList.contains('naso')));
+    await p.click('#btnZfit'); await p.waitForTimeout(300);
+
     check('closing the route hands the console back',
           await p.evaluate(() =>
             getComputedStyle(document.querySelector('#console')).display !== 'none' &&

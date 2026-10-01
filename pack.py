@@ -110,6 +110,28 @@ add("name",np.array(nm,"<u2").tobytes(),"u2",len(nm))
 add("cov",np.array(cov,np.uint8).tobytes(),"u1",len(cov))
 add("shade",T.tobytes(),"u1",T.size)
 
+# --- nasoni ------------------------------------------------------------------
+# Rome's public drinking fountains. Pure coordinates, no names: 460 points cost
+# under 2 kB packed, and what you want from one is that it is there, not what it
+# is called. A fountain you cannot walk up to and drink from is not one of these,
+# so private, customers-only and disused taps are dropped here rather than in the
+# Overpass query, where the tags are easier to read.
+NASO = json.load(open(osm("extra_nasoni.json")))["elements"]
+nax, nay = [], []
+for el in NASO:
+    t = el.get("tags", {}) or {}
+    if t.get("access") in ("private", "customers", "no"): continue
+    if t.get("disused") == "yes" or t.get("drinking_water") == "no": continue
+    lon = el.get("lon", (el.get("center") or {}).get("lon"))
+    lat = el.get("lat", (el.get("center") or {}).get("lat"))
+    if lon is None or lat is None: continue
+    x, y = to_xy(lon, lat)
+    if not (bx0 <= x <= bx1 and by0 <= y <= by1): continue
+    nax.append(float(x)); nay.append(float(y))
+add("nax", q(np.array(nax), OX).tobytes(), "u2", len(nax))
+add("nay", q(np.array(nay), OY).tobytes(), "u2", len(nay))
+print("nasoni packed:", len(nax), "of", len(NASO), "fetched")
+
 G=np.load(build("graph.npz"))
 add("eSeg",G["eSeg"].tobytes(),"u2",len(G["eSeg"]))
 add("eI0", G["eI0"].tobytes(), "u1",len(G["eI0"]))
@@ -128,7 +150,7 @@ pl=[[p["n"], CATS.index(p["c"]),
      int(round((to_xy(p["lon"],p["lat"])[1]-OY)/QS)), p["s"]] for p in PP["places"]]
 print("places packed:", len(pl), "cats", CATS)
 head=dict(sections=hdr, nbld=gj.get("nbld"), nknown=gj.get("nknown"),
-          ncad=gj.get("ncadastre"),
+          ncad=gj.get("ncadastre"), nnaso=len(nax),
           nnode=NNODE, nedge=NEDGE, pl=pl, cats=CATS, top=PP["top"], qs=QS, ox=OX, oy=OY, nseg=len(segs), nframe=T.shape[1],
           kinds=KINDS, names=names, frames=meta,
           bbox=dict(x0=float(bx0),y0=float(by0),x1=float(bx1),y1=float(by1)),

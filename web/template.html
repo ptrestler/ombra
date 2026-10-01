@@ -180,6 +180,14 @@ button{cursor:pointer}
   background:linear-gradient(90deg,var(--sun),var(--mid) 50%,var(--shade))}
 #legend .ends{display:flex;justify-content:space-between;font-size:10px;color:var(--ink-2);
   margin-top:4px;font-weight:500}
+/* Shown only when the map is actually drawing fountains, which is a zoom and a
+   route away. A legend for something you cannot see is just more furniture. */
+#legend .nasorow{display:none;align-items:center;gap:6px;margin-top:6px;
+  padding-top:6px;border-top:1px solid var(--line);font-size:10px;color:var(--ink-2);
+  font-weight:500}
+#legend.naso .nasorow{display:flex}
+#legend .nasorow i{flex:0 0 auto;width:7px;height:7px;border-radius:50%;
+  background:var(--panel);border:1.4px solid var(--ink)}
 
 /* ---------- console ---------- */
 /* On a phone the console was 49% of the screen - the month grid alone is 101px -
@@ -368,9 +376,16 @@ tr.row:hover td{background:var(--panel-2)}
   font-variant-numeric:tabular-nums}
 .rcmp b{color:var(--ink-2);font-weight:600}
 .rcmp .win{color:var(--shade);font-weight:700}
-#rstrip{width:100%;height:56px;display:block;margin-top:9px;touch-action:none;cursor:pointer}
+.rnaso[hidden]{display:none}
+.rnaso{font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:5px;
+  font-variant-numeric:tabular-nums}
+.rnaso b{color:var(--ink-2);font-weight:600}
+.rnaso .dry{color:var(--sun);font-weight:700}
+/* 48, not the street card's 62: the route card carries more lines above it,
+   and every pixel here is a pixel of map on a phone. */
+#rstrip{width:100%;height:48px;display:block;margin-top:6px;touch-action:none;cursor:pointer}
 #rcard.empty .rmodes,#rcard.empty .rcmp,#rcard.empty #rstrip,
-#rcard.empty #rstriplab,#rcard.empty #rBig{display:none}
+#rcard.empty #rstriplab,#rcard.empty #rBig,#rcard.empty .rnaso{display:none}
 .cardtop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-right:20px}
 .cardtop h3{margin:0;font-family:"Bodoni Moda",Georgia,serif;font-size:17px;font-weight:600;
   line-height:1.2;text-wrap:balance}
@@ -445,6 +460,7 @@ tr.row:hover td{background:var(--panel-2)}
       <div class="lb">Shade on the better side</div>
       <div class="bar"></div>
       <div class="ends"><span>Full sun</span><span>50%</span><span>Full shade</span></div>
+      <div class="nasorow"><i></i>Nasone &#8212; drinkable, all year</div>
     </div>
 
     <div id="card">
@@ -492,6 +508,7 @@ tr.row:hover td{background:var(--panel-2)}
         <button class="rm" data-k="4">Shadiest</button>
       </div>
       <div class="rcmp" id="rCompare"></div>
+      <div class="rnaso" id="rNaso"></div>
       <canvas id="rstrip"></canvas>
       <div class="striplab" id="rstriplab"><span>06:00</span><span id="rstripNow"></span><span>21:30</span></div>
       </div>
@@ -879,6 +896,105 @@ function drawLabels(ctx){
   }
 }
 
+/* ---------- nasoni ---------- */
+/* Rome's public drinking fountains run all day, all year, and at 38 degrees
+   they are worth about as much as the shade. 460 of them in the bbox.
+
+   There is no switch for them, only a zoom. The threshold is measured, not
+   picked: on a 390x664 phone the whole set puts 382 dots on the screen at the
+   default zoom, one per 678 square pixels, which is not a map any more. 0.40
+   px/m leaves about 45 of them - one per 5,700 - and shows roughly 1 km across,
+   which is the zoom at which you are looking at a walk rather than at the city.
+   Fountains on a route ignore the threshold: if you have asked for the walk you
+   have asked where the water is.
+
+   They are drawn in ink and panel, not in a colour. Every hue on this map means
+   a shade percentage; a blue fountain would read as a shaded street, and the
+   ramp is the one thing here that has to stay unambiguous. */
+const NASO_NEAR_M = 40;
+const NASO_ZOOM = 0.40;            // px per metre; see the count above
+
+function drawNasoni(ctx){
+  const zoomed = !!D.naX && st.scale >= NASO_ZOOM;
+  const near = (D.naX && st.routing && st.route && st.route.naso)
+             ? st.route.naso.idx : null;
+  // the legend explains them only while they are on the map to be explained
+  $("#legend").classList.toggle("naso", zoomed || !!near);
+  if(!zoomed && !near) return;
+  // barely grows with zoom: a tap is a place, not an area, and at 460 of them
+  // anything balloon-sized stops being a dot and starts being the map
+  const r = Math.max(2.0, Math.min(3.4, st.scale*4));
+  for(let i=0;i<D.naX.length;i++){
+    const hot = near ? near.has(i) : false;
+    if(!zoomed && !hot) continue;
+    const x = sx(D.naX[i]), y = sy(D.naY[i]);
+    if(x < -10 || x > W+10 || y < -10 || y > Hh+10) continue;
+    if(hot){
+      // over the route ribbon, so it needs its own ground to sit on
+      ctx.beginPath(); ctx.arc(x, y, r+1.6, 0, 7);
+      ctx.fillStyle = C.ground; ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(x, y, hot ? r+0.4 : r, 0, 7);
+    ctx.fillStyle = hot ? C.ink : C.panel; ctx.fill();
+    ctx.lineWidth = 1.4; ctx.strokeStyle = C.ink; ctx.stroke();
+  }
+}
+
+/* Which fountains are on a route, and the longest stretch of it without one.
+   The count on its own cannot tell you what you want to know: four fountains
+   clustered round the Pantheon end is not the same walk as four spread along
+   it, and it is the dry stretch you have to carry water for. */
+function nasoniOn(edges){
+  if(!D.naX || !edges || !edges.length) return null;
+  // The route as one ordered polyline. Edge order is walking order, but an
+  // edge's own points may run either way, so each one is turned to follow the
+  // previous end - otherwise the distance along the walk jumps at every join.
+  const px=[], py=[], pd=[];
+  let total=0;
+  for(const e of edges){
+    const off=SEGOFF[D.eSeg[e]];
+    const pts=[];
+    for(let k=D.eI0[e]; k<=D.eI1[e]; k++) pts.push([D.sX[off+k], D.sY[off+k]]);
+    if(pts.length<2) continue;
+    if(px.length){
+      const lx=px[px.length-1], ly=py[py.length-1];
+      const h0=Math.hypot(pts[0][0]-lx, pts[0][1]-ly);
+      const h1=Math.hypot(pts[pts.length-1][0]-lx, pts[pts.length-1][1]-ly);
+      if(h1 < h0) pts.reverse();
+    }
+    for(const [x,y] of pts){
+      const n=px.length;
+      if(n){
+        if(x===px[n-1] && y===py[n-1]) continue;
+        total += Math.hypot(x-px[n-1], y-py[n-1]);
+      }
+      px.push(x); py.push(y); pd.push(total);
+    }
+  }
+  if(px.length<2) return null;
+  const R2 = NASO_NEAR_M*NASO_NEAR_M;
+  const hits=[];
+  for(let i=0;i<D.naX.length;i++){
+    const nx=D.naX[i], ny=D.naY[i];
+    let best=Infinity, at=0;
+    for(let k=1;k<px.length;k++){
+      const ax=px[k-1], ay=py[k-1], dx=px[k]-ax, dy=py[k]-ay;
+      const L2=dx*dx+dy*dy;
+      let t = L2>0 ? ((nx-ax)*dx + (ny-ay)*dy)/L2 : 0;
+      t = t<0 ? 0 : (t>1 ? 1 : t);
+      const ex=nx-(ax+t*dx), ey=ny-(ay+t*dy);
+      const d2=ex*ex+ey*ey;
+      if(d2<best){ best=d2; at = pd[k-1] + t*Math.sqrt(L2); }
+    }
+    if(best<=R2) hits.push({i, at});
+  }
+  hits.sort((a,b)=>a.at-b.at);
+  let gap=0, prev=0;
+  for(const h of hits){ if(h.at-prev > gap) gap = h.at-prev; prev=h.at; }
+  if(total-prev > gap) gap = total-prev;
+  return {idx:new Set(hits.map(h=>h.i)), n:hits.length, gap};
+}
+
 /* ---------- streets ---------- */
 let SEGOFF=null, SEGN=null;
 function prepSegs(){
@@ -975,6 +1091,7 @@ function drawOver(){
       ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(lab,x,y+0.5);
     }
   }
+  drawNasoni(ctx);
   drawLabels(ctx);
   if(st.hi && st.hi.length){
     const wIn = Math.max(4.5, Math.min(14, st.scale*7));
@@ -1169,6 +1286,10 @@ rather than a guess. The remaining <b>__NIMP__</b> are interpolated from their t
 neighbours, weighted by distance.</li>
 <li><b>4,800 mapped trees</b>, 215 tree rows and the wooded parts of parks, modelled as
 9\u201311 m canopy. Tree mapping is patchy, so some leafy streets score drier than they feel.</li>
+<li><b>__NNASO__ nasoni</b> \u2014 the public drinking fountains, from OpenStreetMap. They
+appear on the map as you zoom in, and a planned walk is told how many are on it and how
+long its driest stretch is. Private, customers-only and disused taps are left out; nothing
+here knows whether a particular one is switched off today.</li>
 <li><b>Terrain</b> from the AWS Open Data terrain tiles (SRTM-derived, ~30&nbsp;m),
 sampled onto a 10&nbsp;m grid covering the map plus a 2&nbsp;km margin so hills outside
 the frame still cast into it.</li>
@@ -1239,6 +1360,7 @@ function openSheet(tab){
      .replace("__NBLD__", H.nbld ? H.nbld.toLocaleString("en") : "14,158")
      .replace("__NKNOWN__", H.nknown ? H.nknown.toLocaleString("en") : "2,443")
      .replace("__NCAD__", H.ncad ? H.ncad.toLocaleString("en") : "8,180")
+     .replace("__NNASO__", H.nnaso ? H.nnaso.toLocaleString("en") : "460")
      .replace("__NIMP__", (H.nbld && H.nknown && H.ncad)
         ? (H.nbld - H.nknown - H.ncad).toLocaleString("en") : "3,535")
      // counted off the payload rather than typed in: the street total read
@@ -1475,7 +1597,7 @@ function recompute(){
   const fi=frameIndex();
   const e1=route(st.a,st.b,st.k,fi);
   const e0=st.k===0 ? e1 : route(st.a,st.b,0,fi);
-  st.route   = e1 ? {edges:e1, ...routeStats(e1,fi)} : null;
+  st.route   = e1 ? {edges:e1, ...routeStats(e1,fi), naso:nasoniOn(e1)} : null;
   st.refRoute= e0 ? {edges:e0, ...routeStats(e0,fi)} : null;
 }
 
@@ -1595,7 +1717,21 @@ function renderRoute(){
         "This one adds <b>"+fmtLen(Math.max(0,dL))+"</b> ("+fmtMin(Math.max(0,dL))+
         ") for <span class=\"win\">"+(dS>=0?"+":"")+Math.round(dS)+" points</span> of shade.";
   } else $("#rCompare").innerHTML = "Shortest walkable route \u2014 sun ignored.";
-  drawStrip("#rstrip", r.edges.map(e=>[D.eSeg[e], D.eLen[e]/10]), 56);
+  /* The line costs a line of card, and the card costs map, so it earns its
+     place or it does not appear: no water at all, or a stretch long enough to
+     carry some. Under about 400 m you are never more than a couple of minutes
+     from a tap, and saying so on every route would teach you to skip the line
+     on the route where it matters. The dots on the map cover the rest. */
+  const na = r.naso;
+  const dry = na && na.gap >= 400;
+  $("#rNaso").innerHTML = !na ? "" : (na.n === 0
+    ? "No nasone within " + NASO_NEAR_M + " m of this walk \u2014 fill up first."
+    : dry ? "<b>" + na.n + "</b> " + (na.n === 1 ? "nasone" : "nasoni") +
+            " on the way \u00b7 longest dry stretch <span class=\"dry\">" +
+            fmtLen(na.gap) + "</span>"
+          : "");
+  $("#rNaso").hidden = !$("#rNaso").innerHTML;
+  drawStrip("#rstrip", r.edges.map(e=>[D.eSeg[e], D.eLen[e]/10]), 48);
   $("#rstripNow").textContent = fmtTime(st.ti)+" \u00b7 "+Math.round(r.shade)+"% shade";
 }
 function setEnd(which, node, label){
@@ -2066,6 +2202,9 @@ try{
     D.wcnt=view(buf,"wcnt"); D.wX=dq(view(buf,"wx"),ox); D.wY=dq(view(buf,"wy"),oy);
     D.gcnt=view(buf,"gcnt"); D.gX=dq(view(buf,"gx"),ox); D.gY=dq(view(buf,"gy"),oy);
     D.scnt=view(buf,"scnt"); D.sX=dq(view(buf,"sx"),ox); D.sY=dq(view(buf,"sy"),oy);
+    // guarded: a template newer than the payload beside it should draw a map
+    // without fountains, not fail to boot
+    if(H.sections.nax){ D.naX=dq(view(buf,"nax"),ox); D.naY=dq(view(buf,"nay"),oy); }
     D.kind=view(buf,"kind"); D.name=view(buf,"name"); D.cov=view(buf,"cov");
     D.shade=view(buf,"shade");
     D.eSeg=view(buf,"eSeg"); D.eI0=view(buf,"eI0"); D.eI1=view(buf,"eI1");

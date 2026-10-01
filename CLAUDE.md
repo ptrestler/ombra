@@ -30,7 +30,7 @@ so scripts run from any directory.
 
 | stage | what it does | out |
 |---|---|---|
-| `fetch_osm.py` | streets, buildings, water, greenery, trees, named places | `data/osm/` |
+| `fetch_osm.py` | streets, buildings, water, greenery, trees, nasoni, named places | `data/osm/` |
 | `fetch_eubucco.py` | cadastre building heights for the bbox, from EUBUCCO | `data/eubucco/` |
 | `terrain.py` | elevation tiles → 10 m grid, map bbox + 2 km margin | `build/terr.npy` |
 | `ground.py` | picks terrain smoothing by scoring relief error | `build/ground.npy` |
@@ -105,6 +105,17 @@ unless the parent passes `allow="geolocation"`. Detect this **structurally**
 browser's error message for "policy", which is Chromium's wording, so Safari
 fell through and wrongly told the user they had blocked location. Never assert a
 cause the page cannot verify.
+
+**A new thing on the map competes with the only thing it is for.** Two rules the
+nasoni had to obey, and both were learned by putting 460 dots on the screen and
+looking at it. *Colour is the shade ramp* — every hue on the map already means a
+percentage, so a blue fountain reads as a shaded street. New marks are drawn in
+`--ink` and `--panel`, with no hue of their own. *Density is measured, not
+guessed* — the whole set is 382 dots on a 390×664 phone at the default zoom, one
+per 678 px², which is not a map any more. `NASO_ZOOM` is 0.40 px/m because that
+leaves about 45 of them on screen, and the number came from counting, not from
+taste. The legend row appears and disappears with them, because a key for
+something you cannot see is furniture.
 
 **Overlay UI must be listed in `UIHIT`.** `#stage` captures pointer events for
 pan/zoom; any panel not in that selector list gets its taps *also* treated as map
@@ -258,7 +269,12 @@ street names, place list and shortlist. Coordinates are `uint16`, quantised to
 segment's shade over consecutive half-hours is smooth.
 
 `window.ombra` exposes state and helpers (`st`, `head`, `data`, `setEnd`,
-`recompute`, `nearestNode`, `labelForNode`) for debugging and for the tests.
+`recompute`, `nearestNode`, `labelForNode`, `screenXY`) for debugging and for the
+tests.
+
+Nasoni ride along in two `u2` sections, `nax`/`nay`, quantised like everything
+else; `head.nnaso` is the count. They carry no names — 460 points cost under 2 kB
+packed, and what you want from a fountain is that it is there.
 
 ## Accuracy, measured
 
@@ -326,15 +342,22 @@ patchy — some leafy streets score drier than they feel.
 
 ## Possible next steps
 
-- **Nasoni and cool refuges.** Rome's public drinking fountains
-  (`amenity=drinking_water`), churches and shaded squares, routable as waypoints.
-  Cheap, and at 38 °C arguably worth as much as the shade itself.
-- **The 4,575 heights still guessed.** The cadastre reaches 61 % of the untagged
-  buildings; the rest have no EUBUCCO centroid within 8 m, usually because OSM
-  and the cadastre disagree about where one building stops and the next starts.
-  Matching on footprint overlap instead of centroid distance would reach most of
-  them, and it is a geometry problem rather than a data problem — the data is
-  already downloaded. This is the largest remaining gain in the model.
+- **Cool refuges.** Churches and shaded squares, as places to stop rather than
+  walk through. Deliberately left out of the nasoni change: a church is only a
+  refuge when it is open, and nothing in the pipeline knows opening hours, so the
+  map would be promising something it cannot check. Needs `opening_hours` parsing
+  before it is honest.
+- **Nasoni as waypoints.** They are drawn and counted now, but the router still
+  cannot be told to pass one. "Route me via a fountain" is a two-leg search and a
+  bit of UI.
+- **The 3,535 heights still guessed.** The cadastre now reaches 70 % of the
+  untagged buildings. What is left is the mismatch containment does *not* fix:
+  OSM draws the building more finely than the cadastre does, so our outline sits
+  inside one big parcel and contains no centroid of its own. Matching on footprint
+  *overlap* would reach most of them — but that is the one thing the cached
+  extract cannot answer, because `fetch_eubucco.py` stores parcel centroids and
+  not their geometry. So this starts with a re-fetch and a much larger file under
+  `data/`, and it is still the largest remaining gain in the model.
 - **Wider coverage.** The bbox stops at the historic core; Quartiere Coppedè,
   Testaccio, Ostiense and EUR are just outside.
 - **Multi-stop day planning** — order a day's sights to minimise sun exposure.

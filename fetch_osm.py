@@ -74,6 +74,15 @@ cached(osm("extra_green.json"),
        f'relation["leisure"~"^(park|garden)$"]{BB};way["natural"="wood"]{BB};'
        f'way["landuse"="forest"]{BB};way["landuse"="cemetery"]{BB};'
        f'relation["natural"="wood"]{BB};);out body geom;')
+# --- nasoni: the public drinking fountains that run all day, every day -------
+# Rome's are mostly amenity=drinking_water. A few are mapped as a decorative
+# fountain you may drink from, and a few carry drinking_water=no, which is a
+# contradiction the packer resolves rather than the query.
+cached(osm("extra_nasoni.json"),
+       f'[out:json][timeout:180];(node["amenity"="drinking_water"]{BB};'
+       f'node["man_made"="drinking_fountain"]{BB};'
+       f'nwr["amenity"="fountain"]["drinking_water"="yes"]{BB};);out center tags;')
+
 cached(osm("extra_trees.json"),
        f'[out:json][timeout:180];(node["natural"="tree"]{BB};way["natural"="tree_row"]{BB};);'
        f'out body geom;')
