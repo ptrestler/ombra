@@ -250,7 +250,6 @@ button{cursor:pointer}
 .actions{display:flex;gap:6px;align-items:center}
 .btn{flex:0 0 auto;padding:9px 13px;border-radius:10px;border:1px solid var(--line);
   background:var(--panel-2);font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px}
-.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
 /* This used to be an unlabelled arrow glyph in the masthead, which nobody found.
    It is the app's second job, so it gets a full-width button with its name on it. */
 .btn.route{width:100%;margin-top:7px;justify-content:center;padding:10px 13px;font-size:13px}
@@ -571,7 +570,6 @@ tr.row:hover td{background:var(--panel-2)}
     </div></div>
 
     <div class="actions">
-      <button class="btn primary" id="btnPlay">&#9654; Play day</button>
       <div class="searchwrap">
         <input id="search" type="search" placeholder="Find a street&#8230;" aria-label="Find a street"
                role="combobox" aria-expanded="false" aria-controls="sugg" aria-autocomplete="list"
@@ -581,7 +579,7 @@ tr.row:hover td{background:var(--panel-2)}
     </div>
 
     <button class="btn route" id="btnRoute" aria-pressed="false">
-      <span aria-hidden="true">&#8674;</span> Plan a shady walk</button>
+      Plan a shady walk <span aria-hidden="true">&#8674;</span></button>
 
     <div class="desk-note">
       Drag to pan, scroll or +/− to zoom, click any street to see its whole day.
@@ -846,7 +844,7 @@ const AWAY = (()=>{ try{
   return Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Rome"
     ? "" : " · Rome time";
 }catch(e){ return " · Rome time"; } })();
-const st = {mo:NOW.mo, day:NOW.day, ti:NOW.ti, scale:1, cx:0, cy:0, sel:-1, hi:null, playing:false, raf:0,
+const st = {mo:NOW.mo, day:NOW.day, ti:NOW.ti, scale:1, cx:0, cy:0, sel:-1, hi:null,
             routing:false, a:-1, b:-1, k:1.2, route:null, refRoute:null,
             aL:"", bL:"", pick:null, mapPick:null};
 const dateIdx = () => st.mo*2 + (st.day===15?1:0);
@@ -1171,7 +1169,7 @@ function updateReadouts(){
   document.querySelectorAll(".dy").forEach(b=>b.setAttribute("aria-pressed", +b.dataset.d===st.day));
   paintDaylight();
   if(st.routing && st.a>=0 && st.b>=0){ recompute(); renderRoute(); }
-  if(!st.playing && (!sheetOpen || sheetTab!=="how")) renderList();
+  if(!sheetOpen || sheetTab!=="how") renderList();
   if($("#card").classList.contains("open")) renderCard();
 }
 
@@ -1365,9 +1363,9 @@ changes everything.</li>
 Double-tap zooms in; the <b>+</b> and <b>−</b> buttons do the same, and the one below them
 returns to the whole city. On a keyboard: <b>+</b> and <b>−</b> zoom, arrows pan,
 <b>0</b> fits the city and <b>Esc</b> closes a card you did not mean to open.</li>
-<li>The scrubber runs 06:00 to 21:30; the warm band marks daylight for that month.</li>
-<li><b>Play day</b> animates it \u2014 watch the shade rotate out of the east-west streets
-around one in the afternoon.</li>
+<li>The scrubber runs 06:00 to 21:30; the warm band marks daylight for that month.
+Drag it and watch the shade rotate out of the east-west streets around one in the
+afternoon. A route's own strip scrubs the same way, for that walk.</li>
 </ul>
 </div>`;
 
@@ -1506,7 +1504,7 @@ function bindStrip(sel, out, back){
   const cv=$(sel);
   const slotAt = e => { const r=cv.getBoundingClientRect();
     return Math.round(Math.max(0,Math.min(31,(e.clientX-r.left-3)/(r.width-6)*31))); };
-  const goTo = t => { st.ti=t; stop(); updateReadouts(); schedule(false); };
+  const goTo = t => { st.ti=t; updateReadouts(); schedule(false); };
   cv.addEventListener("pointermove", e=>{
     const v=cv._vals; if(!v) return;
     const t=slotAt(e);
@@ -2034,14 +2032,7 @@ function clampView(){
 }
 
 /* ---------- controls ---------- */
-$("#time").addEventListener("input", e=>{ st.ti=+e.target.value; stop(); updateReadouts(); schedule(false); });
-function stop(){ const was=st.playing; st.playing=false; if(was) setTimeout(renderList,0); $("#btnPlay").textContent="\u25b6 Play day"; if(st.raf){clearInterval(st.raf);st.raf=0;} }
-$("#btnPlay").addEventListener("click", ()=>{
-  if(st.playing){ stop(); return; }
-  st.playing=true; $("#btnPlay").textContent="\u275a\u275a Pause";
-  st.raf=setInterval(()=>{ st.ti=(st.ti+1)%32; updateReadouts(); drawLines(); drawOver(); }, 190);
-  renderList();
-});
+$("#time").addEventListener("input", e=>{ st.ti=+e.target.value; updateReadouts(); schedule(false); });
 /* Collapsed by default on a phone, and remembered: someone who wants the map
    big wants it big every time. Storage throws in a private window, so every
    access is guarded and the default survives it. */
@@ -2316,10 +2307,10 @@ try{
     // months
     const mc=$("#months");
     mc.querySelectorAll(".dy").forEach(b=>b.addEventListener("click",()=>{
-      st.day=+b.dataset.d; stop(); updateReadouts(); schedule(false); }));
+      st.day=+b.dataset.d; updateReadouts(); schedule(false); }));
     MONTH.forEach((m,i)=>{ const b=document.createElement("button");
       b.className="mo"; b.textContent=m; b.setAttribute("aria-pressed", i===st.mo);
-      b.addEventListener("click",()=>{ st.mo=i; stop(); updateReadouts(); schedule(false); });
+      b.addEventListener("click",()=>{ st.mo=i; updateReadouts(); schedule(false); });
       mc.appendChild(b); });
 
     resize();
