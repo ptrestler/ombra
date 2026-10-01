@@ -189,9 +189,17 @@ async function run(engine, label, breakStreams, which) {
           `${pick.mapPct}% of the map area`);
     check('the console steps aside to pay for it', pick.consoleGone);
     check('the zoom controls stay above the sheet', pick.zoom);
-    // the shortlist is the picker now, so the ends are chosen straight off it
-    await p.locator('.res', { hasText: 'Pantheon' }).first().click();
-    await p.waitForTimeout(400);
+    // A and B are fields: typing filters the list under whichever has the cursor
+    await p.fill('#rFromI', 'Pantheon'); await p.waitForTimeout(250);
+    const typed = await p.evaluate(() =>
+      [...document.querySelectorAll('#rResults .res')].map(b => b.textContent));
+    check('typing in the start field filters the list',
+          typed.length > 0 && typed.every(t => /pantheon/i.test(t)),
+          `${typed.length} matches`);
+    await p.press('#rFromI', 'Enter'); await p.waitForTimeout(400);
+    check('Enter takes the top match, and the field keeps it',
+          await p.inputValue('#rFromI') === 'Pantheon',
+          await p.inputValue('#rFromI'));
     // answering "where are you now?" should ask "where are you going?" by itself
     check('picking the start moves straight on to the destination',
           await p.evaluate(() => window.ombra.st.pick) === 'b');
@@ -342,6 +350,19 @@ async function run(engine, label, breakStreams, which) {
     // no version.txt to fetch here, and a downloaded copy must never nag
     check('no stale-build prompt from a file:// copy',
           await p.evaluate(() => document.querySelector('#fresh').hidden));
+    // the thing typing is for: streets are not on the 29-item shortlist
+    await p.click('#rToI'); await p.waitForTimeout(200);
+    await p.fill('#rToI', 'Via Giulia'); await p.waitForTimeout(250);
+    await p.press('#rToI', 'Enter'); await p.waitForTimeout(600);
+    check('a street can be a destination, which only typing can reach',
+          await p.inputValue('#rToI') === 'Via Giulia' &&
+          /km|m/.test(await p.textContent('#rTitle')),
+          `${await p.inputValue('#rToI')} - ${(await p.textContent('#rTitle')).trim()}`);
+    // and an empty field offers the landmarks again rather than nothing
+    await p.fill('#rToI', ''); await p.waitForTimeout(250);
+    check('clearing a field brings the shortlist back', await p.evaluate(() =>
+      document.querySelectorAll('#rResults .res').length >= 20));
+
     await p.click('#rClose'); await p.waitForTimeout(350);
     // 460 taps over the whole city is not a map; they wait for the zoom
     check('no fountains on the city-wide view', await p.evaluate(() =>

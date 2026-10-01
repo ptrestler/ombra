@@ -324,12 +324,20 @@ tr.row:hover td{background:var(--panel-2)}
 #card.open,#rcard.open{display:block}
 #rClose{position:absolute;top:4px;right:5px;z-index:3}
 .rpts{position:relative;display:flex;flex-direction:column;gap:5px;padding-right:34px}
-.rpt{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:9px 10px;
+/* These two were buttons that looked exactly like fields - grey placeholder text
+   and all - and opened a search box somewhere else. People tried to type in them,
+   which was the right instinct about the wrong element. They are fields now, and
+   the suggestions appear underneath whichever one has the cursor. */
+.rpt{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;
   border-radius:10px;border:1px solid var(--line);background:var(--panel-2);
-  font-size:13px;font-weight:500;color:var(--ink);min-height:38px}
-.rpt span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rpt.unset span{color:var(--muted);font-weight:400}
-.rpt[aria-expanded="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+  min-height:38px}
+.rpt input{flex:1;min-width:0;border:none;background:transparent;padding:0;
+  font-size:13px;font-weight:500;color:var(--ink);
+  -webkit-appearance:none;appearance:none}
+.rpt input::placeholder{color:var(--muted);font-weight:400}
+/* the row draws the focus ring, so the field inside does not draw a second one */
+.rpt input:focus{outline:none}
+.rpt:focus-within{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .pin{flex:0 0 auto;width:19px;height:19px;border-radius:50%;background:var(--ink);color:var(--ground);
   font-style:normal;font-size:10.5px;font-weight:700;display:grid;place-items:center}
 .pin.b{background:var(--accent);color:var(--accent-ink)}
@@ -378,7 +386,7 @@ tr.row:hover td{background:var(--panel-2)}
 .res{display:flex;align-items:baseline;justify-content:space-between;gap:10px;width:100%;
   text-align:left;padding:8px 4px;border:none;background:transparent;border-bottom:1px solid var(--line);
   font-size:13px;color:var(--ink)}
-.res:hover{background:var(--panel-2)}
+.res:hover,.res[aria-selected="true"]{background:var(--panel-2)}
 .res .cat{flex:0 0 auto;font-size:10px;letter-spacing:.05em;text-transform:uppercase;
   color:var(--muted);font-weight:600}
 .res em{font-style:normal;font-weight:700}
@@ -494,8 +502,14 @@ tr.row:hover td{background:var(--panel-2)}
     <div id="rcard">
       <button class="close" id="rClose" aria-label="Close">&#215;</button>
       <div class="rpts">
-        <button class="rpt" id="rFrom"><i class="pin">A</i><span id="rFromL">Where are you now?</span></button>
-        <button class="rpt" id="rTo"><i class="pin b">B</i><span id="rToL">Where are you going?</span></button>
+        <div class="rpt" id="rFrom"><i class="pin" aria-hidden="true">A</i>
+          <input id="rFromI" type="search" placeholder="Where are you now?" aria-label="Start of the walk"
+                 autocomplete="off" role="combobox" aria-expanded="false" aria-controls="rResults"
+                 aria-autocomplete="list"></div>
+        <div class="rpt" id="rTo"><i class="pin b" aria-hidden="true">B</i>
+          <input id="rToI" type="search" placeholder="Where are you going?" aria-label="Destination"
+                 autocomplete="off" role="combobox" aria-expanded="false" aria-controls="rResults"
+                 aria-autocomplete="list"></div>
         <button class="swap" id="rSwap" title="Swap" aria-label="Swap start and destination">&#8645;</button>
       </div>
 
@@ -505,7 +519,7 @@ tr.row:hover td{background:var(--panel-2)}
           <button class="pk" id="pickMap">Pick on the map</button>
         </div>
         <p class="geonote" id="geoNote" hidden></p>
-        <div id="rResults"></div>
+        <div id="rResults" role="listbox" aria-label="Matching places and streets"></div>
       </div>
 
       <div id="rsum">
@@ -1701,14 +1715,14 @@ function renderRoute(){
   const card=$("#rcard");
   document.querySelectorAll(".rm").forEach(b=>
     b.setAttribute("aria-pressed", parseFloat(b.dataset.k)===st.k));
-  $("#rFromL").textContent = st.aL || "Where are you now?";
-  $("#rToL").textContent   = st.bL || "Where are you going?";
-  $("#rFrom").classList.toggle("unset", !st.aL);
-  $("#rTo").classList.toggle("unset", !st.bL);
+  // never over the one being typed into: renderRoute runs on every clock tick
+  // while a route is up, and that would eat a half-finished name
+  setField("#rFromI", st.aL);
+  setField("#rToI", st.bL);
   if(st.pick) return;
   setPicking(false);
-  $("#rFrom").setAttribute("aria-expanded","false");
-  $("#rTo").setAttribute("aria-expanded","false");
+  $("#rFromI").setAttribute("aria-expanded","false");
+  $("#rToI").setAttribute("aria-expanded","false");
   if(st.a<0 || st.b<0){
     card.classList.add("empty");
     $("#rTitle").textContent = "Plan a shady walk";
@@ -1756,6 +1770,7 @@ function setEnd(which, node, label){
   if(node<0) return;
   const wasMap = st.mapPick;
   if(which==="a"){ st.a=node; st.aL=label; } else { st.b=node; st.bL=label; }
+  fieldOf(which).value = label;
   st.pick=null; st.mapPick=null;
   recompute(); renderRoute();
   // Answering "where are you now?" always means the next question is "where are
@@ -1764,7 +1779,13 @@ function setEnd(which, node, label){
   // they were dropping pins on the map, stay in that mode rather than yanking
   // them back to the search box.
   const next = (which==="a" && st.b<0) ? "b" : ((which==="b" && st.a<0) ? "a" : null);
-  if(next){ openPick(next); if(wasMap) startMapPick(); }
+  if(next){
+    openPick(next);
+    // a mouse can take the cursor straight to the next field; a touch keyboard
+    // would cover the map we just framed the first pin on
+    if(wasMap) startMapPick();
+    else if(!matchMedia("(hover: none)").matches) setTimeout(()=>fieldOf(next).focus(), 30);
+  }
   // last, because asking the next question resizes the map this has to fit:
   // the picker takes the lower half and the console goes away underneath it.
   frameEnds(); schedule(true);
@@ -1813,13 +1834,19 @@ function setPicking(on){
   $("#rcard").classList.toggle("picking", on);
   resize();
 }
+const fieldOf = which => $(which === "a" ? "#rFromI" : "#rToI");
+function setField(sel, label){
+  const el = $(sel);
+  if(document.activeElement === el) return;      // they are mid-word
+  el.value = label || "";
+}
 function openPick(which){
   st.pick=which; st.mapPick=null;
   setPicking(true);
-  $("#rFrom").setAttribute("aria-expanded", which==="a");
-  $("#rTo").setAttribute("aria-expanded", which==="b");
+  $("#rFromI").setAttribute("aria-expanded", which==="a");
+  $("#rToI").setAttribute("aria-expanded", which==="b");
   $("#pickMap").setAttribute("aria-pressed","false");
-  applyGeoStatus(); renderResults(""); renderRoute();
+  applyGeoStatus(); renderResults(fieldOf(which).value.trim()); renderRoute();
 }
 /* Only ever called with an empty query now that the picker has no search field:
    that is the shortlist. The query path is kept because `searchDest` still ranks
@@ -1835,7 +1862,8 @@ function renderResults(q){
     let nm=r.n;
     if(nq){ const at=norm(nm).indexOf(nq);
       if(at>=0) nm = nm.slice(0,at)+"<em>"+nm.slice(at,at+nq.length)+"</em>"+nm.slice(at+nq.length); }
-    return '<button class="res" data-ix="'+ix+'"><span>'+nm+'</span><span class="cat">'+r.c+'</span></button>';
+    return '<button class="res" role="option" aria-selected="false" data-ix="'+ix+'">'+
+           '<span>'+nm+'</span><span class="cat">'+r.c+'</span></button>';
   }).join("");
   box.querySelectorAll(".res").forEach(btn=>btn.addEventListener("click",()=>{
     const r=rows[+btn.dataset.ix], xy=entryXY(r);
@@ -2123,18 +2151,42 @@ $("#btnRoute").addEventListener("click", ()=> st.routing ? closeRoute() : openRo
 $("#rClose").addEventListener("click", closeRoute);
 // The card opens with the A picker already showing, so a plain toggle made the
 // first tap on "Where are you now?" close the search instead of answering it.
-// Collapse only when that end is already set. Tapping the end it is already
-// asking about is not a request to close the thing you are answering - but if
-// "pick on the map" has replaced the list with its own note, that tap is the way
-// back to the list. Without this the mode is a dead end: the field that used to
-// redraw the list when you typed in it is gone.
-const pickTap = (which, has) => () => {
-  if(st.pick!==which) return openPick(which);
-  if(has()){ st.pick=null; renderRoute(); return; }
-  if(st.mapPick) openPick(which);
-};
-$("#rFrom").addEventListener("click", pickTap("a", ()=>st.aL));
-$("#rTo").addEventListener("click",   pickTap("b", ()=>st.bL));
+/* Focus opens the picker for that end, typing filters it, and the arrows walk
+   the list. Coming back to a field is also how you leave "pick on the map",
+   which is where you would go anyway once you had changed your mind. */
+let resAt = -1;
+function markRes(){
+  $("#rResults").querySelectorAll(".res").forEach((b,i)=>{
+    b.setAttribute("aria-selected", i===resAt ? "true" : "false");
+    if(i===resAt && b.scrollIntoView) b.scrollIntoView({block:"nearest"});
+  });
+}
+for(const which of ["a","b"]){
+  const el = fieldOf(which);
+  el.addEventListener("focus", ()=>{ resAt=-1; openPick(which); el.select(); });
+  el.addEventListener("input", ()=>{ resAt=-1; renderResults(el.value.trim()); });
+  el.addEventListener("keydown", e=>{
+    const rows = $("#rResults").querySelectorAll(".res");
+    if(e.key==="ArrowDown" || e.key==="ArrowUp"){
+      if(!rows.length) return;
+      e.preventDefault();
+      const d = e.key==="ArrowDown" ? 1 : -1;
+      resAt = resAt < 0 ? (d > 0 ? 0 : rows.length-1)
+                        : (resAt + d + rows.length) % rows.length;
+      markRes();
+    } else if(e.key==="Enter"){
+      if(!rows.length) return;
+      e.preventDefault();
+      rows[resAt < 0 ? 0 : resAt].click();
+    } else if(e.key==="Escape"){
+      e.stopPropagation(); st.pick=null; renderRoute(); el.blur();
+    }
+  });
+}
+// the row is wider than the field inside it; a tap on the pin still lands in it
+document.querySelectorAll(".rpt").forEach(row=>row.addEventListener("click", e=>{
+  if(e.target.tagName !== "INPUT") row.querySelector("input").focus();
+}));
 $("#rSwap").addEventListener("click", ()=>{
   const a=st.a,al=st.aL; st.a=st.b; st.aL=st.bL; st.b=a; st.bL=al;
   st.pick=null; recompute(); renderRoute(); schedule(false); });
