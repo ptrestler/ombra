@@ -2,7 +2,7 @@
 # Stages are ordered; each depends on the one above. `make` builds everything.
 PY := python3
 
-.PHONY: all fetch rasters shade web artifact test heights clean distclean
+.PHONY: all fetch rasters shade web artifact test heights overlap clean distclean
 
 all: web
 
@@ -48,6 +48,11 @@ test:
 ## that heights.py and CLAUDE.md quote. Reads data/, not build/.
 heights:
 	$(PY) measure_heights.py
+
+## overlap -- re-test footprint-overlap matching, which sounds like the obvious
+## next win and measures as a wash. Needs the network and duckdb.
+overlap:
+	$(PY) measure_overlap.py
 
 clean:                      ## derived files only; keeps the downloaded data
 	rm -rf build dist

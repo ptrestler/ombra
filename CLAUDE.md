@@ -47,10 +47,12 @@ position), `heights.py` (OSM height tags → metres, plus the cadastre lookup),
 `buildings.py` (the outlines, shared by the build and the report),
 `streets.py` (segmentation).
 
-Two scripts that measure rather than build, neither on the `make` path:
+Three scripts that measure rather than build, none on the `make` path:
 `measure_heights.py` (`make heights`) scores every height source against the OSM
 tags and prints the tables `heights.py` quotes; `compare_frames.py` diffs two
-`build/frames.npy` so a model change can be seen rather than assumed.
+`build/frames.npy` so a model change can be seen rather than assumed; and
+`measure_overlap.py` (`make overlap`, needs the network and `duckdb`) re-tests
+footprint-overlap matching, which sounds like the obvious next win and is not.
 
 ## How the shade model works
 
@@ -327,6 +329,24 @@ against 5.02 m on the 1,620 buildings both rules reach, bootstrap interval
 [−0.71, −0.16] — plus 1,040 more buildings whose height was surveyed instead of
 inferred from the neighbours.
 
+**Footprint overlap does not beat the interpolation it would replace, and the
+reason is in the data rather than the geometry.** Containment handles the
+cadastre splitting a block more finely than OSM draws it. The reverse case — our
+outline inside one big parcel, containing no parcel centroid — looks like a
+geometry problem with an obvious fix, and `measure_overlap.py` tests both forms
+of it against the OSM tags. The parcel our centre falls in scores 5.00 m where
+the interpolation it would displace scores 4.96 m; the parcel covering most of
+us scores 5.54 m against 5.40 m. Both bootstrap intervals straddle zero. Taking
+either lifts coverage from 70 % to 83 % and makes the model's overall error
+slightly *worse*, 5.33 m to 5.37 m.
+
+That is not a near miss to be tuned. When the cadastre lumps several buildings
+into one parcel, that parcel's height is an average over a block, which is the
+same kind of estimate the inverse-distance interpolation already builds out of
+tagged neighbours — so the swap trades one average for another and pays 19 MB of
+polygons for it. The cadastre holds no separate measurement for those 3,535
+buildings. Getting them measured means a different source, not a better match.
+
 **The elevation data is a surface model, not bare earth** — buildings are baked
 in, so the dense centre reads ~12 m high and hill-to-valley relief is compressed
 by ~8 m. Three corrections were tried and *all made relief worse*: morphological
@@ -350,14 +370,10 @@ patchy — some leafy streets score drier than they feel.
 - **Nasoni as waypoints.** They are drawn and counted now, but the router still
   cannot be told to pass one. "Route me via a fountain" is a two-leg search and a
   bit of UI.
-- **The 3,535 heights still guessed.** The cadastre now reaches 70 % of the
-  untagged buildings. What is left is the mismatch containment does *not* fix:
-  OSM draws the building more finely than the cadastre does, so our outline sits
-  inside one big parcel and contains no centroid of its own. Matching on footprint
-  *overlap* would reach most of them — but that is the one thing the cached
-  extract cannot answer, because `fetch_eubucco.py` stores parcel centroids and
-  not their geometry. So this starts with a re-fetch and a much larger file under
-  `data/`, and it is still the largest remaining gain in the model.
+- ~~**The 3,535 heights still guessed, via footprint overlap.**~~ Tried and
+  measured: it does not pay. See below — `measure_overlap.py` is the receipt.
+  If you want those buildings measured rather than estimated, the cadastre is
+  not where the measurement is.
 - **Wider coverage.** The bbox stops at the historic core; Quartiere Coppedè,
   Testaccio, Ostiense and EUR are just outside.
 - **Multi-stop day planning** — order a day's sights to minimise sun exposure.
