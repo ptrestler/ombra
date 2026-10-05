@@ -358,11 +358,16 @@ async function run(engine, label, breakStreams, which) {
       }
       return { via: r.via, on: r.via >= 0 && r.naso.idx.has(r.via), joined,
                len: Math.round(r.len), direct: r.direct && Math.round(r.direct.len),
-               line: document.querySelector('#rNaso').textContent.trim() };
+               line: document.querySelector('#rNaso').textContent.trim(),
+               band: (() => {
+                 const s = document.querySelector('#stage').getBoundingClientRect();
+                 const c = document.querySelector('#rcard').getBoundingClientRect();
+                 return Math.round((c.top - s.top) / s.height * 100); })() };
     });
     check('and the walk then passes one', via.on, via.line);
     check('as one connected walk, no longer than it has to be',
           via.joined && via.len >= via.direct - 1, `${via.direct} m -> ${via.len} m`);
+    check('and the card still leaves the route most of the screen', via.band >= 50, `${via.band}% map`);
     check('the stop can be taken back', await viaBtn() === 'Go direct');
     await p.click('#rVia'); await p.waitForTimeout(300);
     check('and taking it back restores the direct walk',
