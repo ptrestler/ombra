@@ -429,6 +429,46 @@ async function run(engine, label, breakStreams, which) {
   await browser.close();
 }
 
+/* The phone layout is overlays over a full-screen map, and overlays collide.
+   Both of these were real: the legend sat on top of the route pill at 360 px
+   and under it at 320 px, and once the legend moved up it landed on the
+   masthead, which grows a line when the subtitle wraps. 320 px is where both
+   showed, so that is where this looks. */
+async function narrowLayout(){
+  const browser = await chromium.launch(EXE.chromium ? { executablePath: EXE.chromium } : {});
+  const ctx = await browser.newContext({ viewport: { width: 320, height: 700 },
+                                         deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on('pageerror', e => errs.push(e.message));
+  await p.route('**fonts.googleapis.com**', r => r.abort());
+  console.log('');
+  console.log('Chromium, 320 px wide');
+  await p.goto(url, { waitUntil: 'domcontentloaded' });
+  await p.waitForFunction(() => document.querySelector('#loading').style.display === 'none',
+                          { timeout: 45000 });
+  await p.waitForTimeout(300);
+  const m = await p.evaluate(() => {
+    const r = s => document.querySelector(s).getBoundingClientRect();
+    const hit = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) *
+                          Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)) > 0;
+    const leg = r('#legend'), pill = r('#btnRoute'), con = r('#console'), top = r('#top');
+    return { full: Math.round(r('#stage').height) === innerHeight,
+             stripPct: Math.round(100 * con.height / innerHeight),
+             legVsPill: hit(leg, pill), legVsTop: hit(leg, top),
+             legVsCon: hit(leg, con), pillVsCon: hit(pill, con),
+             onScreen: pill.left >= 0 && pill.right <= innerWidth && leg.left >= 0 };
+  });
+  check('the map runs the whole screen, with the strip over it', m.full);
+  check('and the strip is a strip', m.stripPct <= 32, `${m.stripPct}% of the screen`);
+  check('legend clear of the route pill', !m.legVsPill);
+  check('legend clear of the masthead', !m.legVsTop);
+  check('nothing overlaps the strip', !m.legVsCon && !m.pillVsCon);
+  check('and all of it is on screen', m.onScreen);
+  check('no console or page errors', errs.length === 0, errs.slice(0, 2).join(' | '));
+  await browser.close();
+}
+
 // The route panel is a floating card on a phone and a sidebar section on a
 // desktop, moved between the two by placeRcard. Getting that wrong once left the
 // close button anchored to the sidebar instead of the card.
@@ -510,10 +550,27 @@ async function freshness(){
   srv.close();
 }
 
-await run(chromium, 'Chromium', false, 'chromium');
-await run(webkit, 'WebKit', false, 'webkit');
-await run(webkit, 'WebKit with the Streams API broken (iOS Quick Look)', true, 'webkit');
-await desktopLayout();
-await freshness();
+/* A browser that will not start is a failed check, not a crashed run: on a
+   Windows machine with Smart App Control on, WebKit dies at init with
+   0xC0000142 and used to take the whole suite with it, including the checks
+   that would have passed. The run still fails - there is no way to get a green
+   out of a browser that never opened - but everything else is still measured,
+   and CI runs on Linux where WebKit works. */
+async function attempt(fn, label){
+  try { await fn(); }
+  catch (e) {
+    console.log(`\n${label}`);
+    check('the browser starts', false,
+          String(e.message || e).split('\n')[0].slice(0, 90));
+  }
+}
+
+await attempt(() => run(chromium, 'Chromium', false, 'chromium'), 'Chromium');
+await attempt(() => run(webkit, 'WebKit', false, 'webkit'), 'WebKit');
+await attempt(() => run(webkit, 'WebKit with the Streams API broken (iOS Quick Look)', true, 'webkit'),
+              'WebKit with the Streams API broken (iOS Quick Look)');
+await attempt(desktopLayout, 'Chromium, desktop width');
+await attempt(narrowLayout, 'Chromium, 320 px wide');
+await attempt(freshness, 'Chromium, served over HTTP');
 console.log(`\n${failures ? failures + ' CHECKS FAILED' : 'all checks passed'}`);
 process.exit(failures ? 1 : 0);

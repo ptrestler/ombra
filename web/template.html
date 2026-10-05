@@ -190,11 +190,21 @@ button{cursor:pointer}
   background:var(--panel);border:1.4px solid var(--ink)}
 
 /* ---------- console ---------- */
-/* On a phone the console was 49% of the screen - the month grid alone is 101px -
-   and the map is the point. Collapsing folds the date grid and the search row
-   away and hands that back to the map; the clock, the scrubber, the search box
-   and the route button stay, because those are what you actually reach for.
-   Desktop has a whole sidebar and never needs it. */
+/* On a phone the console is an overlay now, not a block that shortens the map:
+   #stage fills the screen and the console floats on the bottom edge like the
+   masthead floats on the top. What stays out is the clock, the sun readings and
+   the scrubber - the scrubber because it is the control the whole app turns on.
+   The date grid and "find a street" fold away behind the handle, and the route
+   button leaves the strip entirely for a pill that floats above it.
+
+   Measured on a 390x664 phone: the console was 248 px, 37% of the screen. The
+   strip is 169 px, 25%, so the map goes from 63% to 75% and runs edge to edge
+   underneath rather than sitting in a letterbox above.
+
+   Anything anchored to the bottom needs to clear the strip, and the strip's
+   height depends on the safe area, the fold state and the font, so resize()
+   measures it into --con-h rather than anyone guessing it here.
+   Desktop has a whole sidebar and none of this applies. */
 .contoggle{display:none}
 @media (max-width:859px){
   .contoggle{display:flex;align-items:center;justify-content:center;gap:7px;
@@ -438,6 +448,40 @@ tr.row:hover td{background:var(--panel-2)}
 #loading .l{text-align:center}
 #loading h1{font-family:"Bodoni Moda",Georgia,serif;font-size:30px;margin:0 0 6px;font-weight:600}
 #loading p{margin:0;font-size:12px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
+
+/* ---------- the phone layout ---------- */
+/* Last, on purpose: these override the base rules for #console, #card, #legend
+   and the route button, and source order is what decides that. Putting them up
+   beside the fold rules is how the console ended up pinned to the top of the
+   screen the first time. */
+@media (max-width:859px){
+  #stage{position:absolute;inset:0;flex:none}
+  #console{position:absolute;left:0;right:0;bottom:0;
+    background:color-mix(in srgb,var(--panel) 93%,transparent);
+    backdrop-filter:blur(12px);border-top:1px solid var(--line);
+    border-radius:16px 16px 0 0;box-shadow:0 -8px 28px rgba(0,0,0,.10)}
+  /* "Find a street" stays out, as it has since the console first folded: hiding
+     it with the date grid buys about 5% of the screen and costs you the search,
+     which was judged the wrong trade then and is the same trade now. The route
+     button leaving for a pill is where this layout gets its room instead. */
+  /* out of the strip and onto the map, so the app's second job is one tap away
+     whatever the strip is doing */
+  #btnRoute{position:fixed;right:12px;left:auto;width:auto;margin:0;z-index:7;
+    bottom:calc(var(--con-h, 170px) + 12px);
+    border-radius:999px;padding:11px 16px;box-shadow:var(--shadow);
+    background:var(--panel)}
+  #btnRoute[aria-pressed="true"]{background:var(--accent);border-color:transparent}
+  #app.routing #btnRoute{display:none}
+  /* The legend used to sit bottom-left, which is where the route pill now wants
+     to be: at 360 px they overlapped by 2 px and at 320 px by 42 px. A key is
+     reference and the pill is the action, so the key moves up under the title
+     and the whole bottom edge belongs to the action. Stacking them instead
+     would have meant measuring the legend too, and it changes height when the
+     fountains appear. */
+  #legend{top:calc(var(--top-h, 68px) + 10px);left:12px;bottom:auto}
+  #card{bottom:calc(var(--con-h, 170px) + 12px);
+    max-height:calc(100% - var(--con-h, 170px) - 36px)}
+}
 
 @media (min-width:860px){
   #app{flex-direction:row-reverse}
@@ -876,7 +920,28 @@ function resize(){
   DPR = Math.min(window.devicePixelRatio||1, 2);
   W = Math.max(1, Math.round(r.width)); Hh = Math.max(1, Math.round(r.height));
   for(const c of [cvBase,cvLine,cvOver]){ c.width=Math.round(W*DPR); c.height=Math.round(Hh*DPR); }
+  measureChrome();
   drawAll();
+}
+
+/* On a phone the map runs under the chrome, so everything anchored to an edge
+   has to clear it: the legend sits below the masthead, and the route pill and
+   the cards sit above the strip. Neither height is ours to predict - the strip
+   moves with the safe area and the fold, the masthead grows a line when the
+   subtitle wraps at 360 px - and neither is settled at first paint, because the
+   webfonts land afterwards and change both. So they are observed, not assumed.
+   Measuring once at boot is how the pill came to sit 16 px inside the strip on
+   a 320 px screen. */
+function measureChrome(){
+  const con = $("#console"), root = document.documentElement;
+  const ch = getComputedStyle(con).display === "none" ? 0 : Math.round(con.offsetHeight);
+  root.style.setProperty("--con-h", ch + "px");
+  root.style.setProperty("--top-h",
+    Math.round($("#top").getBoundingClientRect().height) + "px");
+}
+if(window.ResizeObserver){
+  const ro = new ResizeObserver(measureChrome);
+  ro.observe($("#console")); ro.observe($("#top"));
 }
 const sx = x => (x - st.cx)*st.scale + W/2;
 const sy = y => (st.cy - y)*st.scale + Hh/2;

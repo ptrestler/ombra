@@ -168,6 +168,23 @@ sits on one in the sidebar and the other on a phone. Note it returns
 `rgb(r,g,b)` while the tokens are hex; mixing the two up is what made the first
 attempt paint every number the same flat ink.
 
+**On a phone the chrome floats over the map, and its height is measured, never
+assumed.** `#stage` fills the screen and the console, the masthead, the legend
+and the route pill sit on top of it. Everything anchored to an edge has to clear
+the others, so `measureChrome()` writes the console's height into `--con-h` and
+the masthead's into `--top-h`, and a `ResizeObserver` keeps them true. Both move
+for reasons you will not predict: the safe area, the fold, the subtitle wrapping
+to two lines at 360 px, and the webfonts landing *after* first paint. Measuring
+once at boot is how the route pill came to sit 16 px inside the strip at 320 px
+— correct at 390, wrong where the layout reflowed later.
+
+**And the phone rules must come last in the stylesheet.** They override the base
+`#console`, `#card`, `#legend` and `.btn.route` rules, which are defined further
+down the file; a media query adds no specificity, so source order is the whole
+mechanism. Putting them up beside the fold rules pinned the console to the top of
+the screen, with the map underneath it. The desktop block comes after them and
+still wins, which is what keeps the sidebar layout untouched.
+
 **The route panel resizes the map, so frame the map last.** On a phone the whole
 console is hidden while the panel is up (`#app.routing`), which makes the map
 area grow by about 250 px and shrink again on close; the picker on top of that
