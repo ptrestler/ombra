@@ -328,6 +328,48 @@ async function run(engine, label, breakStreams, which) {
           naso.line || '(silent, as it should be)');
     check('the legend explains them while they are on the map', naso.legend);
 
+    // Via a nasone: a dry walk offers the stop, and taking it bends the walk
+    // through a fountain without breaking it into pieces
+    const keep = await p.evaluate(() => {
+      const o = window.ombra, st = o.st, H = o.head, keep = { a: st.a, b: st.b };
+      const [ax, ay] = o.nodeXY(st.a);
+      for (let n = 0; n < H.nnode; n += 37) {
+        if (o.comp(n) !== o.bigc()) continue;
+        const [x, y] = o.nodeXY(n), d = Math.hypot(x - ax, y - ay);
+        if (d < 1200 || d > 2500) continue;
+        st.b = n; o.recompute();
+        const na = st.route && st.route.naso;
+        if (na && (na.n === 0 || na.gap >= 400)) break;
+      }
+      o.renderRoute();
+      return keep;
+    });
+    const viaBtn = () => p.evaluate(() => {
+      const b = document.querySelector('#rVia'); return b ? b.textContent : null; });
+    check('a dry walk offers to route via a nasone', await viaBtn() === 'Route via one');
+    await p.click('#rVia'); await p.waitForTimeout(300);
+    const via = await p.evaluate(() => {
+      const o = window.ombra, r = o.st.route, D = o.data;
+      let joined = true;
+      for (let i = 1; i < r.edges.length; i++) {
+        const e0 = r.edges[i - 1], e1 = r.edges[i];
+        const s0 = [D.eU[e0], D.eV[e0]];
+        if (!s0.includes(D.eU[e1]) && !s0.includes(D.eV[e1])) joined = false;
+      }
+      return { via: r.via, on: r.via >= 0 && r.naso.idx.has(r.via), joined,
+               len: Math.round(r.len), direct: r.direct && Math.round(r.direct.len),
+               line: document.querySelector('#rNaso').textContent.trim() };
+    });
+    check('and the walk then passes one', via.on, via.line);
+    check('as one connected walk, no longer than it has to be',
+          via.joined && via.len >= via.direct - 1, `${via.direct} m -> ${via.len} m`);
+    check('the stop can be taken back', await viaBtn() === 'Go direct');
+    await p.click('#rVia'); await p.waitForTimeout(300);
+    check('and taking it back restores the direct walk',
+          await p.evaluate(() => window.ombra.st.route.via === -1 && !window.ombra.st.via));
+    await p.evaluate(k => { const o = window.ombra; o.st.a = k.a; o.st.b = k.b;
+                            o.recompute(); o.renderRoute(); }, keep);
+
     // the route card carries its own scrubber, and it is about this route
     check('the console stays out of the way while the route is up',
           await p.evaluate(() => getComputedStyle(document.querySelector('#console')).display === 'none'));

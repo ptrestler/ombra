@@ -404,6 +404,9 @@ tr.row:hover td{background:var(--panel-2)}
   font-variant-numeric:tabular-nums}
 .rnaso b{color:var(--ink-2);font-weight:600}
 .rnaso .dry{color:var(--sun);font-weight:700}
+.rvia{margin-left:4px;padding:2px 9px;border-radius:99px;border:1px solid var(--line);
+  background:transparent;font:inherit;font-weight:600;color:var(--ink-2);white-space:nowrap}
+.rvia[aria-pressed="true"]{border-color:var(--ink)}
 /* 48, not the street card's 62: the route card carries more lines above it,
    and every pixel here is a pixel of map on a phone. */
 #rstrip{width:100%;height:48px;display:block;margin-top:6px;touch-action:none;cursor:pointer}
@@ -857,7 +860,7 @@ const AWAY = (()=>{ try{
 }catch(e){ return " · Rome time"; } })();
 const st = {mo:NOW.mo, day:NOW.day, ti:NOW.ti, scale:1, cx:0, cy:0, sel:-1, hi:null,
             routing:false, a:-1, b:-1, k:1.2, route:null, refRoute:null,
-            aL:"", bL:"", pick:null, mapPick:null};
+            aL:"", bL:"", pick:null, mapPick:null, via:false};
 const dateIdx = () => st.mo*2 + (st.day===15?1:0);
 const dateBase = () => dateIdx()*32;
 const dayLabel = () => (st.day===1?"1":"15");
@@ -958,13 +961,18 @@ function drawNasoni(ctx){
   const r = Math.max(2.0, Math.min(3.4, st.scale*4));
   for(let i=0;i<D.naX.length;i++){
     const hot = near ? near.has(i) : false;
+    const stop = hot && st.route.via === i;
     if(!zoomed && !hot) continue;
     const x = sx(D.naX[i]), y = sy(D.naY[i]);
     if(x < -10 || x > W+10 || y < -10 || y > Hh+10) continue;
     if(hot){
       // over the route ribbon, so it needs its own ground to sit on
-      ctx.beginPath(); ctx.arc(x, y, r+1.6, 0, 7);
+      ctx.beginPath(); ctx.arc(x, y, (stop ? r+3 : r)+1.6, 0, 7);
       ctx.fillStyle = C.ground; ctx.fill();
+    }
+    if(stop){            // the one the walk was bent to reach: a ring round it
+      ctx.beginPath(); ctx.arc(x, y, r+3, 0, 7);
+      ctx.lineWidth = 1.4; ctx.strokeStyle = C.ink; ctx.stroke();
     }
     ctx.beginPath(); ctx.arc(x, y, hot ? r+0.4 : r, 0, 7);
     ctx.fillStyle = hot ? C.ink : C.panel; ctx.fill();
@@ -1574,16 +1582,18 @@ function nearestNode(x,y){
   return bd < 250*250 ? bi : -1;
 }
 
-/* A*: cost = metres x (1 + k x sun-fraction); h = straight-line metres (admissible, k>=0) */
+/* A*: cost = metres x (1 + k x sun-fraction); h = straight-line metres (admissible, k>=0).
+   With dst < 0 there is no target: h is 0 and it sweeps the whole network, which
+   is plain Dijkstra and leaves the cost to every node in DIST. */
 let DIST,PREV,PREVE,STATE,HEAP,HPOS;
-function route(src,dst,k,fi){
+function search(src,dst,k,fi){
   const NN=H.nnode;
   if(!DIST){ DIST=new Float64Array(NN); PREV=new Int32Array(NN);
              PREVE=new Int32Array(NN); STATE=new Uint8Array(NN); HEAP=new Int32Array(NN+1); }
   DIST.fill(Infinity); STATE.fill(0);
   const F=new Float64Array(NN); F.fill(Infinity);
-  const bx=NODEX[dst], by=NODEY[dst];
-  const hOf=i=>Math.hypot(NODEX[i]-bx, NODEY[i]-by);
+  const bx=dst<0 ? 0 : NODEX[dst], by=dst<0 ? 0 : NODEY[dst];
+  const hOf= dst<0 ? ()=>0 : i=>Math.hypot(NODEX[i]-bx, NODEY[i]-by);
   let hn=0;
   const push=(i)=>{ let c=++hn; HEAP[c]=i;
     while(c>1){ const p=c>>1; if(F[HEAP[p]]<=F[HEAP[c]]) break;
@@ -1610,11 +1620,54 @@ function route(src,dst,k,fi){
       if(nd < DIST[v]){ DIST[v]=nd; PREV[v]=u; PREVE[v]=e; F[v]=nd+hOf(v); push(v); }
     }
   }
-  if(DIST[dst]===Infinity) return null;
-  const edges=[]; let x=dst;
-  while(x!==src && PREVE[x]>=0){ edges.push(PREVE[x]); x=PREV[x]; }
-  edges.reverse();
-  return edges;
+}
+function pathTo(prev, preve, src, x){        // edges src -> x, walking order
+  const edges=[];
+  while(x!==src && preve[x]>=0){ edges.push(preve[x]); x=prev[x]; }
+  return edges.reverse();
+}
+function route(src,dst,k,fi){
+  search(src,dst,k,fi);
+  return DIST[dst]===Infinity ? null : pathTo(PREV, PREVE, src, dst);
+}
+
+/* Via a nasone. The walk A -> fountain -> B that costs least, in the same
+   currency as the walk itself, so a shady detour to water beats a sunny one.
+   The cost is symmetric, so two sweeps answer it for all 460 at once: one out
+   from A, one out from B, and each fountain's total is the sum of the two at
+   its node. A fountain counts only if a street node is within NASO_NEAR_M of
+   it - the same distance that decides whether a walk passes one at all - so
+   the stop it picks is one the card will then count as on the way. */
+let NASONODE=null;
+function nasoNodes(){
+  if(NASONODE) return NASONODE;
+  NASONODE=new Int32Array(D.naX.length).fill(-1);
+  for(let i=0;i<D.naX.length;i++){
+    let bi=-1, bd=NASO_NEAR_M*NASO_NEAR_M;
+    for(let n=0;n<H.nnode;n++){
+      if(COMP[n]!==BIGC) continue;
+      const dx=NODEX[n]-D.naX[i], dy=NODEY[n]-D.naY[i], d=dx*dx+dy*dy;
+      if(d<bd){bd=d;bi=n;}
+    }
+    NASONODE[i]=bi;
+  }
+  return NASONODE;
+}
+function routeVia(src,dst,k,fi){
+  if(!D.naX) return null;
+  const nn=nasoNodes();
+  search(src,-1,k,fi);
+  const dA=DIST.slice(), pA=PREV.slice(), eA=PREVE.slice();
+  search(dst,-1,k,fi);
+  let best=-1, bc=Infinity;
+  for(let i=0;i<nn.length;i++){
+    const n=nn[i]; if(n<0) continue;
+    const c=dA[n]+DIST[n];
+    if(c<bc){bc=c;best=i;}
+  }
+  if(best<0) return null;
+  const n=nn[best];
+  return {naso:best, edges: pathTo(pA,eA,src,n).concat(pathTo(PREV,PREVE,dst,n).reverse())};
 }
 function routeStats(edges, fi){
   let L=0, sh=0;
@@ -1629,7 +1682,11 @@ function recompute(){
   const fi=frameIndex();
   const e1=route(st.a,st.b,st.k,fi);
   const e0=st.k===0 ? e1 : route(st.a,st.b,0,fi);
-  st.route   = e1 ? {edges:e1, ...routeStats(e1,fi), naso:nasoniOn(e1)} : null;
+  const v = st.via && e1 ? routeVia(st.a,st.b,st.k,fi) : null;
+  st.route   = !e1 ? null : v
+    ? {edges:v.edges, ...routeStats(v.edges,fi), naso:nasoniOn(v.edges), via:v.naso,
+       direct:routeStats(e1,fi)}
+    : {edges:e1, ...routeStats(e1,fi), naso:nasoniOn(e1), via:-1};
   st.refRoute= e0 ? {edges:e0, ...routeStats(e0,fi)} : null;
 }
 
@@ -1693,7 +1750,8 @@ const fmtLen = m => {
   }
   return m>=1000 ? (m/1000).toFixed(m<10000?2:1)+" km" : Math.round(m)+" m";
 };
-const fmtMin = m => Math.max(1,Math.round(m/75))+" min";
+const esc = s0 => s0.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+const fmtMin = m =>Math.max(1,Math.round(m/75))+" min";
 function openRoute(){
   st.routing=true; stage.classList.add("routing");
   $("#app").classList.add("routing"); resize();   // the map just grew by a button
@@ -1708,7 +1766,7 @@ function closeRoute(){
   $("#app").classList.remove("routing");
   $("#btnRoute").setAttribute("aria-pressed","false");
   $("#rcard").classList.remove("open"); setPicking(false);
-  st.a=-1; st.b=-1; st.aL=""; st.bL=""; st.pick=null; st.mapPick=null;
+  st.a=-1; st.b=-1; st.aL=""; st.bL=""; st.pick=null; st.mapPick=null; st.via=false;
   st.route=null; st.refRoute=null; resize(); schedule(false);
 }
 function renderRoute(){
@@ -1741,7 +1799,15 @@ function renderRoute(){
   $("#rPct").textContent = Math.round(r.shade);
   $("#rBig").style.color = rampInk(r.shade);
   const ref=st.refRoute;
-  if(ref && st.k>0){
+  if(r.via>=0){
+    // the stop is a choice they made, so the detour is measured against the
+    // walk they would have had without it, not against the shortest one
+    const dL=Math.max(0, r.len-r.direct.len);
+    $("#rCompare").innerHTML = "Without the stop: <b>"+fmtLen(r.direct.len)+"</b>, "+
+      Math.round(r.direct.shade)+"% shade.<br>"+(dL<10
+        ? "The water is <b>on the way</b> \u2014 no detour."
+        : "The water adds <b>"+fmtLen(dL)+"</b> ("+fmtMin(dL)+").");
+  } else if(ref && st.k>0){
     const dL=r.len-ref.len, dS=r.shade-ref.shade;
     $("#rCompare").innerHTML = dL<2 && dS<1
       ? "This <b>is</b> the shortest way \u2014 no detour needed."
@@ -1754,14 +1820,24 @@ function renderRoute(){
      carry some. Under about 400 m you are never more than a couple of minutes
      from a tap, and saying so on every route would teach you to skip the line
      on the route where it matters. The dots on the map cover the rest. */
+  /* The same rule decides the button: it is offered where the line is, on a
+     walk that is dry, and nowhere else. Once taken it stays up as the way back. */
   const na = r.naso;
   const dry = na && na.gap >= 400;
-  $("#rNaso").innerHTML = !na ? "" : (na.n === 0
-    ? "No nasone within " + NASO_NEAR_M + " m of this walk \u2014 fill up first."
-    : dry ? "<b>" + na.n + "</b> " + (na.n === 1 ? "nasone" : "nasoni") +
-            " on the way \u00b7 longest dry stretch <span class=\"dry\">" +
-            fmtLen(na.gap) + "</span>"
-          : "");
+  const drySpan = na ? " \u00b7 longest dry stretch <span class=\"dry\">" + fmtLen(na.gap) + "</span>" : "";
+  if(r.via>=0){
+    const lab = labelForNode(nasoNodes()[r.via]);
+    $("#rNaso").innerHTML = "Via the nasone " + (lab.startsWith("near ") ? "" : "on ") +
+      "<b>" + esc(lab) + "</b>" + (dry ? drySpan : "") +
+      ' <button class="rvia" id="rVia" aria-pressed="true">Go direct</button>';
+  } else {
+    $("#rNaso").innerHTML = !na ? "" : (na.n === 0
+      ? "No nasone within " + NASO_NEAR_M + " m of this walk."
+      : dry ? "<b>" + na.n + "</b> " + (na.n === 1 ? "nasone" : "nasoni") + " on the way" + drySpan
+            : "");
+    if($("#rNaso").innerHTML && D.naX)
+      $("#rNaso").innerHTML += ' <button class="rvia" id="rVia" aria-pressed="false">Route via one</button>';
+  }
   $("#rNaso").hidden = !$("#rNaso").innerHTML;
   drawStrip("#rstrip", r.edges.map(e=>[D.eSeg[e], D.eLen[e]/10]), 48);
   $("#rstripNow").textContent = fmtTime(st.ti)+" \u00b7 "+Math.round(r.shade)+"% shade";
@@ -1817,8 +1893,11 @@ function frameEnds(){
     st.cy = NODEY[n] + (topPad + availH/2 - Hh/2)/st.scale;
     return;
   }
-  const x0=Math.min(NODEX[st.a],NODEX[st.b]), x1=Math.max(NODEX[st.a],NODEX[st.b]);
-  const y0=Math.min(NODEY[st.a],NODEY[st.b]), y1=Math.max(NODEY[st.a],NODEY[st.b]);
+  // a stop for water can sit off the line between them, and it has to be in shot
+  const pts=[st.a, st.b];
+  if(st.route && st.route.via>=0) pts.push(nasoNodes()[st.route.via]);
+  const xs=pts.map(n=>NODEX[n]), ys=pts.map(n=>NODEY[n]);
+  const x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys);
   const [topPad, availH] = strip(), sidePad=52;
   const availW=Math.max(140, W-sidePad*2);
   st.scale=Math.min(1.2, Math.max(0.05,
@@ -2192,6 +2271,10 @@ $("#rSwap").addEventListener("click", ()=>{
   st.pick=null; recompute(); renderRoute(); schedule(false); });
 $("#pickGeo").addEventListener("click", useGeo);
 $("#pickMap").addEventListener("click", startMapPick);
+// the button is rebuilt with the line on every render, so listen on the line
+$("#rNaso").addEventListener("click", e=>{
+  if(!e.target.closest("#rVia")) return;
+  st.via=!st.via; recompute(); renderRoute(); frameEnds(); schedule(true); });
 document.querySelectorAll(".rm").forEach(b=>b.addEventListener("click", ()=>{
   st.k=parseFloat(b.dataset.k); recompute(); renderRoute(); schedule(false); }));
 $("#btnList").addEventListener("click", ()=> sheetOpen && sheetTab!=="how" ? closeSheet() : openSheet("shade"));
@@ -2371,7 +2454,7 @@ try{
     updateReadouts(); drawAll(); renderList();
     window.ombra = {st, setPoint, setEnd, openPick, searchDest, entryXY, recompute, rampInk,
                     BUILD, checkFresh,
-                    renderRoute, frameIndex, nearestNode, labelForNode,
+                    renderRoute, frameIndex, nearestNode, labelForNode, nasoNodes,
                     nodeXY:i=>[NODEX[i],NODEY[i]], comp:i=>COMP[i], bigc:()=>BIGC,
                     screenXY:i=>[sx(NODEX[i]),sy(NODEY[i])],   // where it is on screen now
                     get data(){return D}, get head(){return H}};
