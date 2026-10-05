@@ -47,14 +47,16 @@ position), `heights.py` (OSM height tags → metres, plus the cadastre lookup),
 `buildings.py` (the outlines, shared by the build and the report),
 `streets.py` (segmentation).
 
-Four scripts that measure rather than build, none on the `make` path:
+Five scripts that measure rather than build, none on the `make` path:
 `measure_heights.py` (`make heights`) scores every height source against the OSM
 tags and prints the tables `heights.py` quotes; `compare_frames.py` diffs two
 `build/frames.npy` so a model change can be seen rather than assumed; and
 `measure_overlap.py` (`make overlap`, needs the network and `duckdb`) re-tests
 footprint-overlap matching, which sounds like the obvious next win and is not;
-and `measure_via.mjs` (needs a build) scores which fountain "Route via one"
-picks, on 300 random dry walks.
+`measure_via.mjs` (needs a build) scores which fountain "Route via one"
+picks, on 300 random dry walks; and `measure_boot.mjs` (needs a build) times
+each boot stage at desktop speed and with the CPU slowed 4×, from the
+`window.ombra.BOOT` laps the page records.
 
 ## How the shade model works
 
@@ -209,6 +211,17 @@ geolocation message, an unclickable close button behind a stacking context) were
 invisible in Chromium. `npx playwright install webkit` if it is missing.
 `tests/smoke.mjs` honours `PLAYWRIGHT_CHROMIUM_PATH` and `PLAYWRIGHT_WEBKIT_PATH`
 for unusual installs; leave both unset unless you actually need them.
+
+**Never `closePath` in a path with thousands of subpaths.** In Chromium it
+costs time proportional to the path so far, so drawing every outline in one
+path is quadratic: 2 k outlines 22 ms, 16 k 1,340 ms, 32 k 5,431 ms. `drawPolys`
+did exactly that, and it was 1.15 s of a 1.7 s desktop boot — about 5 s of 7 on
+a phone — and the same again on every whole-city redraw. Ending each outline
+with `lineTo` back to its first point costs 4 ms at 16 k and fills identically,
+because `fill` closes subpaths itself. Boot went from 1.7 s to 0.5 s, and at 4×
+CPU from ~6.8 s to 2.0 s. It hid for so long because it is invisible zoomed in,
+where culling leaves a few hundred outlines, and because nothing timed the
+boot by stage: `measure_boot.mjs` does now.
 
 **"Route via one" is scored on the dry stretch, not on the detour.** The
 obvious rule — the fountain that adds least — chose one the walk already passed
@@ -390,7 +403,19 @@ patchy — some leafy streets score drier than they feel.
   If you want those buildings measured rather than estimated, the cadastre is
   not where the measurement is.
 - **Wider coverage.** The bbox stops at the historic core; Quartiere Coppedè,
-  Testaccio, Ostiense and EUR are just outside.
+  Testaccio, Ostiense and EUR are just outside. What it costs is measured, not
+  the streets themselves (the cache ends at the bbox): the payload is 87 %
+  per-segment data (shade alone 70 %), about **124 B of HTML per segment and
+  31 B per building**. The bbox's own 1 km cells run from 800 segments/km²
+  (Villa Pamphili) to 2,700 (centro storico), mean 1,936, so a km² costs
+  **200–320 kB** and, since every boot stage but the draw scales with the
+  payload, **+80–120 ms of phone boot** (`measure_boot.mjs`). A 1 km strip on
+  one side is ~5 km²: +1.0–1.6 MB, ~2.5 s phone boot. Strips on the south,
+  north and east together: ~9.7 MB, ~3.6 s. EUR, 4–5 km south, would roughly
+  double the file on its own; it wants its own bbox, not a stretched one.
+  Terrain already reaches 2 km past the bbox. Before the `closePath` fix the
+  same strips would have taken the quadratic first draw, at ~26 k outlines,
+  from 1.2 s to ~3.5 s on desktop.
 - **Multi-stop day planning** — order a day's sights to minimise sun exposure.
 - **Another city.** Nothing in the pipeline is Rome-specific except the bbox in
   `fetch_osm.py`/`terrain.py`, the landmark shortlist in `places.py`, and the

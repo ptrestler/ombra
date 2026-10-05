@@ -894,9 +894,15 @@ function drawPolys(ctx, cnt, X, Y, fill, stroke, minPx){
       if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
     const ax=sx(x0),bx=sx(x1),by=sy(y0),ay=sy(y1);
     if(bx< -40||ax>W+40||by< -40||ay>Hh+40||(bx-ax)<minPx&&(by-ay)<minPx){p+=n;continue;}
-    ctx.moveTo(sx(X[p]),sy(Y[p]));
+    // Back to the first point by hand, not closePath. In Chromium closePath
+    // costs time proportional to the path so far, so 15,000 outlines in one
+    // path took 1.2 s a redraw (5 s on a phone) - quadratic, measured: 2k
+    // outlines 22 ms, 16k 1,340 ms, 32k 5,431 ms; with lineTo, 4 ms at 16k.
+    // The fill is identical, because fill closes every subpath itself.
+    const fx=sx(X[p]), fy=sy(Y[p]);
+    ctx.moveTo(fx,fy);
     for(let k=1;k<n;k++) ctx.lineTo(sx(X[p+k]),sy(Y[p+k]));
-    ctx.closePath(); drew++; p+=n;
+    ctx.lineTo(fx,fy); drew++; p+=n;
   }
   if(fill){ctx.fillStyle=fill;ctx.fill("evenodd");}
   if(stroke&&st.scale>0.12){ctx.strokeStyle=stroke;ctx.lineWidth=Math.min(1,st.scale*1.2);ctx.stroke();}
@@ -2459,13 +2465,19 @@ try{
 }catch(e){}
 
 /* ---------- boot ---------- */
+/* Where boot time goes, stage by stage, in ms. Read by measure_boot.mjs; costs
+   nothing to keep, and a slow boot is otherwise a single number with no cause. */
+const BOOT = {};
 (async function boot(){
+  let t = performance.now();
+  const lap = k => { const n = performance.now(); BOOT[k] = Math.round(n - t); t = n; };
   try{
     const raw = document.getElementById("payload").textContent.trim();
     $("#lmsg").textContent = "Unpacking shadows\u2026";
-    const gz = b64bytes(raw);
+    const gz = b64bytes(raw); lap("b64");
     await new Promise(r=>setTimeout(r,16));          // let that message paint first
-    const buf = gunzip(gz).buffer;
+    lap("paint");
+    const buf = gunzip(gz).buffer; lap("inflate");
     const hlen = new DataView(buf).getUint32(0, true);
     H = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, hlen)));
     H.hoff = 4 + hlen;
@@ -2483,7 +2495,9 @@ try{
     D.shade=view(buf,"shade");
     D.eSeg=view(buf,"eSeg"); D.eI0=view(buf,"eI0"); D.eI1=view(buf,"eI1");
     D.eU=view(buf,"eU"); D.eV=view(buf,"eV"); D.eLen=view(buf,"eLen");
-    prepSegs(); buildNameIndex(); computeCityAvg(); readColors(); buildGraph(); buildSearch();
+    lap("unpack");
+    prepSegs(); buildNameIndex(); computeCityAvg(); lap("segments");
+    readColors(); buildGraph(); lap("graph"); buildSearch(); lap("search");
 
     // months
     const mc=$("#months");
@@ -2496,8 +2510,8 @@ try{
 
     resize();
     fitAll();
-    updateReadouts(); drawAll(); renderList();
-    window.ombra = {st, setPoint, setEnd, openPick, searchDest, entryXY, recompute, rampInk,
+    updateReadouts(); drawAll(); renderList(); lap("draw");
+    window.ombra = {st, BOOT, setPoint, setEnd, openPick, searchDest, entryXY, recompute, rampInk,
                     BUILD, checkFresh,
                     renderRoute, frameIndex, nearestNode, labelForNode, nasoNodes,
                     nodeXY:i=>[NODEX[i],NODEY[i]], comp:i=>COMP[i], bigc:()=>BIGC,
