@@ -47,12 +47,14 @@ position), `heights.py` (OSM height tags → metres, plus the cadastre lookup),
 `buildings.py` (the outlines, shared by the build and the report),
 `streets.py` (segmentation).
 
-Three scripts that measure rather than build, none on the `make` path:
+Four scripts that measure rather than build, none on the `make` path:
 `measure_heights.py` (`make heights`) scores every height source against the OSM
 tags and prints the tables `heights.py` quotes; `compare_frames.py` diffs two
 `build/frames.npy` so a model change can be seen rather than assumed; and
 `measure_overlap.py` (`make overlap`, needs the network and `duckdb`) re-tests
-footprint-overlap matching, which sounds like the obvious next win and is not.
+footprint-overlap matching, which sounds like the obvious next win and is not;
+and `measure_via.mjs` (needs a build) scores which fountain "Route via one"
+picks, on 300 random dry walks.
 
 ## How the shade model works
 
@@ -207,6 +209,22 @@ geolocation message, an unclickable close button behind a stacking context) were
 invisible in Chromium. `npx playwright install webkit` if it is missing.
 `tests/smoke.mjs` honours `PLAYWRIGHT_CHROMIUM_PATH` and `PLAYWRIGHT_WEBKIT_PATH`
 for unusual installs; leave both unset unless you actually need them.
+
+**"Route via one" is scored on the dry stretch, not on the detour.** The
+obvious rule — the fountain that adds least — chose one the walk already passed
+97 % of the time: median detour 0 m, and every dry walk exactly as dry. The
+minimax rule (shortest longer leg) ignores the fountains already on the way and
+only moved the median dry stretch from 841 m to 776 m. What ships scores each
+fountain as *longest dry stretch of the new walk + metres it adds*, both in
+walked metres, so there is no weight to tune: 841 m → 581 m median, p90
+1,412 m → 844 m, for a median 17 m more walking (Balanced, `node
+measure_via.mjs`). "Metres added" can be negative — the stop can pull a
+shade-weighted walk onto a shorter line. Two sweeps (from A, from B) give every
+fountain both legs at once; candidates are tried in order of a lower bound on
+their detour (crow-flies A→F→B, and cost/(1+k)) and stop when that alone loses,
+which took Shadiest from 188 ms a recompute to 74 ms. The button only appears
+where the dry-stretch line does, and the line must stay one line on a phone:
+two pushes the card past half the map.
 
 ## Publishing
 
@@ -367,9 +385,6 @@ patchy — some leafy streets score drier than they feel.
   refuge when it is open, and nothing in the pipeline knows opening hours, so the
   map would be promising something it cannot check. Needs `opening_hours` parsing
   before it is honest.
-- **Nasoni as waypoints.** They are drawn and counted now, but the router still
-  cannot be told to pass one. "Route me via a fountain" is a two-leg search and a
-  bit of UI.
 - ~~**The 3,535 heights still guessed, via footprint overlap.**~~ Tried and
   measured: it does not pay. See below — `measure_overlap.py` is the receipt.
   If you want those buildings measured rather than estimated, the cadastre is
