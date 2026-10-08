@@ -479,6 +479,99 @@ async function desktopLayout(){
 // version.txt with no-store and offers a reload when that disagrees with the
 // stamp baked into it. The quiet cases matter most - the artifact and a file://
 // copy have no version.txt at all, and must never nag.
+// The files a deploy puts beside the page, served as Pages would serve them.
+const TYPES = { '.js': 'text/javascript', '.webmanifest': 'application/manifest+json',
+                '.png': 'image/png' };
+function serveDist(req, res, override = {}) {
+  const path = req.url.split('?')[0];
+  const ext = Object.keys(TYPES).find(e => path.endsWith(e));
+  if (!ext) return false;
+  const file = resolve(root, 'dist' + path);
+  if (!override[path] && !existsSync(file)) { res.writeHead(404); res.end(); return true; }
+  res.writeHead(200, { 'Content-Type': TYPES[ext] });
+  res.end(override[path] ?? readFileSync(file));
+  return true;
+}
+
+// The installable app: what Pages serves, as an installed phone would see it.
+// Chromium only - Playwright's WebKit does not run service workers.
+async function installable(){
+  console.log('');
+  console.log('Chromium, as an installed app (manifest, service worker, offline)');
+  const html0 = readFileSync(page_, 'utf8');
+  const stamp = readFileSync(resolve(root, 'dist/version.txt'), 'utf8').trim();
+  const NEXT = '2099-01-01 00:00 deadbee';
+  // "deploying" a new build: the page and the worker both carry the new stamp
+  let gen = 0;
+  const pageFor  = () => gen ? html0.split(stamp).join(NEXT) : html0;
+  const swFor    = () => gen ? readFileSync(resolve(root, 'dist/sw.js'), 'utf8').split(stamp).join(NEXT) : null;
+  const srv = createServer((req, res) => {
+    const path = req.url.split('?')[0];
+    if (path === '/version.txt') { res.writeHead(200); return res.end(gen ? NEXT : stamp); }
+    const sw = swFor();
+    if (serveDist(req, res, sw ? { '/sw.js': sw } : {})) return;
+    if (path === '/' || path === '/index.html') {
+      res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end(pageFor());
+    }
+    res.writeHead(404); res.end();
+  });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}/`;
+  const browser = await chromium.launch(EXE.chromium ? { executablePath: EXE.chromium } : {});
+  const ctx = await browser.newContext({ ...devices['iPhone 13'] });
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on('pageerror', e => errs.push(e.message));
+  await p.route('**fonts.googleapis.com**', r => r.abort());
+  const booted = () => p.waitForFunction(() => document.querySelector('#loading').style.display === 'none',
+                                         { timeout: 45000 }).then(() => true, () => false);
+
+  // the manifest, and icons that are the sizes it claims
+  const m = await (await fetch(base + 'manifest.webmanifest')).json();
+  check('the manifest names the app and opens it standalone',
+        m.name === 'Ombra Roma' && m.display === 'standalone' && m.start_url === './',
+        `${m.short_name}, ${m.display}`);
+  const sizes = [];
+  for (const ic of m.icons) {
+    const b = Buffer.from(await (await fetch(base + ic.src)).arrayBuffer());
+    const w = b.readUInt32BE(16), h = b.readUInt32BE(20);   // PNG IHDR
+    sizes.push(`${w}x${h}` === ic.sizes);
+  }
+  check('every icon is the size the manifest says',
+        sizes.length >= 3 && sizes.every(Boolean) && m.icons.some(i => i.purpose === 'maskable'));
+
+  await p.goto(base); await booted();
+  const reg = await p.evaluate(() => navigator.serviceWorker.ready.then(r => !!r.active));
+  check('the service worker installs on the first visit', reg);
+  check('no update offered on a first visit',
+        await p.evaluate(() => document.querySelector('#fresh').hidden));
+  await p.reload(); await booted();
+  check('and controls the page from the next one',
+        await p.evaluate(() => !!navigator.serviceWorker.controller));
+
+  // a phone in a Roman courtyard with no signal
+  await ctx.setOffline(true);
+  await p.reload();
+  check('it boots with no network at all', await booted());
+  await ctx.setOffline(false);
+
+  // a deploy lands: the page should offer it, and taking it should load it
+  gen = 1;
+  await p.reload(); await booted();
+  const offered = await p.waitForFunction(() => !document.querySelector('#fresh').hidden,
+                                          { timeout: 15000 }).then(() => true, () => false);
+  check('a new deploy is offered once it is ready', offered);
+  if (offered) {
+    await Promise.all([p.waitForEvent('load', { timeout: 20000 }).catch(() => null), p.click('#fresh')]);
+    await booted();
+    const now = await p.evaluate(() => window.ombra.BUILD);
+    check('and taking it loads the new build', now === NEXT, now);
+  }
+  check('no page errors', errs.length === 0, errs.join(' | '));
+  await browser.close();
+  srv.close();
+}
+
 async function freshness(){
   console.log('');
   console.log('Chromium, served over HTTP (how Pages serves it)');
@@ -496,6 +589,7 @@ async function freshness(){
       res.writeHead(200, { 'Content-Type': 'text/plain' });
       return res.end(version);
     }
+    if (serveDist(req, res)) return;
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(html);
   });
@@ -510,7 +604,10 @@ async function freshness(){
     await p.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'domcontentloaded' });
     await p.waitForFunction(() => document.querySelector('#loading').style.display === 'none',
                             { timeout: 45000 });
-    await p.waitForTimeout(600);         // the check is a fetch, so give it a beat
+    // the check is a fetch, and once a service worker controls the page it is a
+    // worker update as well: wait for the pill, and treat 3 s of nothing as none
+    await p.waitForFunction(() => !document.querySelector('#fresh').hidden, { timeout: 3000 })
+           .catch(() => {});
     const out = await p.evaluate(() => ({ build: window.ombra.BUILD,
                                           up: !document.querySelector('#fresh').hidden }));
     await ctx.close();
@@ -532,5 +629,6 @@ await run(webkit, 'WebKit', false, 'webkit');
 await run(webkit, 'WebKit with the Streams API broken (iOS Quick Look)', true, 'webkit');
 await desktopLayout();
 await freshness();
+await installable();
 console.log(`\n${failures ? failures + ' CHECKS FAILED' : 'all checks passed'}`);
 process.exit(failures ? 1 : 0);
