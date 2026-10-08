@@ -659,6 +659,34 @@ async function hereAndNow(){
   check('"Use my location" takes the fix the dot already has',
         /^My location/.test(await p.inputValue('#rFromI')), await p.inputValue('#rFromI'));
   await p.click('#rClose'); await p.waitForTimeout(200);
+  // closing the card used to leave the old text in the field, so reopening
+  // searched for it and the shortlist came back as "Nothing matched"
+  await p.click('#btnRoute'); await p.waitForTimeout(300);
+  const again = await p.evaluate(() => ({ rows: document.querySelectorAll('#rResults .res').length,
+                                          field: document.querySelector('#rFromI').value }));
+  check('reopening the route card starts clean, with the shortlist', again.rows > 5 && again.field === '',
+        `${again.rows} rows, field "${again.field}"`);
+  await p.click('#rClose'); await p.waitForTimeout(200);
+
+  // saved places: star an end, find it at the top of the picker, keep it across launches
+  p.on('dialog', d => d.accept('Hotel'));
+  await p.click('#btnRoute'); await p.waitForTimeout(300);
+  await p.click('#rResults .res'); await p.waitForTimeout(300);          // first landmark as A
+  await p.click('.star[data-w="a"]'); await p.waitForTimeout(150);
+  check('a chosen end can be saved', await p.evaluate(() =>
+    document.querySelector('.star[data-w="a"]').getAttribute('aria-pressed') === 'true'));
+  await p.click('#rClose'); await p.waitForTimeout(200);
+  await p.reload(); await booted(p);
+  await p.click('#btnRoute'); await p.waitForTimeout(300);
+  const top = await p.evaluate(() => { const r = document.querySelector('#rResults .res');
+    return r ? r.textContent : ''; });
+  check('and is the first thing offered, after a relaunch', /^Hotel\s*Saved$/.test(top.trim()), top.trim());
+  await p.click('#rResults .res'); await p.waitForTimeout(300);
+  check('one tap makes it an end of the walk', await p.inputValue('#rFromI') === 'Hotel');
+  await p.click('.star[data-w="a"]'); await p.waitForTimeout(150);
+  check('and the star takes it off the list again', await p.evaluate(() =>
+    !localStorage.getItem('ombra.saved').includes('Hotel')));
+  await p.click('#rClose'); await p.waitForTimeout(200);
 
   // now: live until the clock is moved, and back on request
   const live0 = await p.evaluate(() => window.ombra.st.live && document.querySelector('#btnNow').hidden);

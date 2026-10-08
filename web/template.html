@@ -356,6 +356,13 @@ tr.row:hover td{background:var(--panel-2)}
   font-size:13px;font-weight:500;color:var(--ink);
   -webkit-appearance:none;appearance:none}
 .rpt input::placeholder{color:var(--muted);font-weight:400}
+/* Save the place in this field. Ink, not a colour: an outline star until it is
+   saved, a filled one after. The button is bigger than its glyph so a thumb
+   can find it inside the field. */
+.star{flex:0 0 auto;border:none;background:transparent;color:var(--muted);font-size:17px;
+  line-height:1;padding:2px 4px;margin:-4px -4px -4px 0}
+.star[aria-pressed="true"]{color:var(--ink)}
+.star[hidden]{display:none}
 /* the row draws the focus ring, so the field inside does not draw a second one */
 .rpt input:focus{outline:none}
 .rpt:focus-within{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
@@ -537,11 +544,13 @@ tr.row:hover td{background:var(--panel-2)}
         <div class="rpt" id="rFrom"><i class="pin" aria-hidden="true">A</i>
           <input id="rFromI" type="search" placeholder="Where are you now?" aria-label="Start of the walk"
                  autocomplete="off" role="combobox" aria-expanded="false" aria-controls="rResults"
-                 aria-autocomplete="list"></div>
+                 aria-autocomplete="list">
+          <button class="star" data-w="a" aria-pressed="false" aria-label="Save this place" hidden>&#9734;</button></div>
         <div class="rpt" id="rTo"><i class="pin b" aria-hidden="true">B</i>
           <input id="rToI" type="search" placeholder="Where are you going?" aria-label="Destination"
                  autocomplete="off" role="combobox" aria-expanded="false" aria-controls="rResults"
-                 aria-autocomplete="list"></div>
+                 aria-autocomplete="list">
+          <button class="star" data-w="b" aria-pressed="false" aria-label="Save this place" hidden>&#9734;</button></div>
         <button class="swap" id="rSwap" title="Swap" aria-label="Swap start and destination">&#8645;</button>
       </div>
 
@@ -1808,10 +1817,55 @@ function streetXY(name){
     for(let k=0;k<SEGN[si];k++){ x+=D.sX[off+k]; y+=D.sY[off+k]; n++; } }
   return n ? [x/n,y/n] : null;
 }
-function entryXY(e){ return e.kind===0 ? placeXY(e.i) : streetXY(e.i); }
+function entryXY(e){ return e.kind===2 ? [e.x, e.y] : (e.kind===0 ? placeXY(e.i) : streetXY(e.i)); }
+
+/* ---------- saved places ---------- */
+/* Your hotel, the café you keep going back to: one tap as either end of a walk.
+   Kept on this device only. Stored as a position, not a node number - node
+   numbers are rebuilt with every map and would quietly point somewhere else
+   after an update - and matched back to a place within 25 m. Twenty at most:
+   past that the list stops being a shortcut. */
+const SAVE_KEY = "ombra.saved";
+let SAVED = (() => { try{
+  const v = JSON.parse(localStorage.getItem(SAVE_KEY) || "[]");
+  return Array.isArray(v) ? v.filter(p => p && typeof p.n === "string" &&
+                                         isFinite(p.x) && isFinite(p.y)).slice(0, 20) : [];
+}catch(e){ return []; } })();
+function storeSaved(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(SAVED)); }catch(e){} }
+const savedAt = (x, y) => SAVED.findIndex(p => Math.hypot(p.x - x, p.y - y) < 25);
+const savedRows = n => SAVED.filter(p => !n || norm(p.n).includes(n))
+                            .map(p => ({n:p.n, c:"Saved", kind:2, x:p.x, y:p.y, hi:0}));
+function syncStars(){
+  for(const w of ["a", "b"]){
+    const node = w === "a" ? st.a : st.b, b = document.querySelector('.star[data-w="'+w+'"]');
+    b.hidden = node < 0;
+    const on = node >= 0 && savedAt(NODEX[node], NODEY[node]) >= 0;
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    b.innerHTML = on ? "&#9733;" : "&#9734;";
+    b.setAttribute("aria-label", on ? "Remove from saved places" : "Save this place");
+  }
+}
+document.querySelectorAll(".star").forEach(b => b.addEventListener("click", e => {
+  e.stopPropagation();                 // the row would otherwise open the picker
+  const w = b.dataset.w, node = w === "a" ? st.a : st.b;
+  if(node < 0) return;
+  const i = savedAt(NODEX[node], NODEY[node]);
+  if(i >= 0){ SAVED.splice(i, 1); toast("Removed from your saved places.", 2500); }
+  else{
+    const lab = (w === "a" ? st.aL : st.bL).replace(/^My location \u00b7 /, "");
+    const name = prompt("Save this place as", lab);
+    if(name === null) return;
+    SAVED.unshift({n:(name.trim() || lab).slice(0, 60), x:Math.round(NODEX[node]), y:Math.round(NODEY[node])});
+    SAVED = SAVED.slice(0, 20);
+    toast("Saved. It's at the top of the list whenever you pick a place.", 3000);
+  }
+  storeSaved(); syncStars();
+  if(st.pick) renderResults(fieldOf(st.pick).value.trim());
+}));
+
 function searchDest(q){
   const n=norm(q);
-  if(!n) return H.top.map(t=>({n:t[0], c:"", i:t[2], kind:t[1], hi:0}));
+  if(!n) return savedRows("").concat(H.top.map(t=>({n:t[0], c:"", i:t[2], kind:t[1], hi:0})));
   const out=[];
   for(const src of [PLN,STN])
     for(const e of src){
@@ -1822,7 +1876,7 @@ function searchDest(q){
     }
   out.sort((a,b)=> (b.s>=100?1:0)-(a.s>=100?1:0) || (a.hi===0?0:1)-(b.hi===0?0:1) ||
                    a.hi-b.hi || (b.s-a.s) || a.n.length-b.n.length || a.n.localeCompare(b.n));
-  return out.slice(0,40);
+  return savedRows(n).concat(out).slice(0,40);
 }
 function labelForNode(n){
   for(let p=HEADi[n];p<HEADi[n+1];p++){
@@ -1866,6 +1920,9 @@ function closeRoute(){
   $("#btnRoute").setAttribute("aria-pressed","false");
   $("#rcard").classList.remove("open"); setPicking(false);
   st.a=-1; st.b=-1; st.aL=""; st.bL=""; st.pick=null; st.mapPick=null; st.via=false;
+  // and the text in the fields: reopening searched for whatever was left there,
+  // so the shortlist came back as "Nothing matched"
+  fieldOf("a").value = ""; fieldOf("b").value = "";
   st.route=null; st.refRoute=null; resize(); schedule(false);
 }
 function renderRoute(){
@@ -1876,6 +1933,7 @@ function renderRoute(){
   // while a route is up, and that would eat a half-finished name
   setField("#rFromI", st.aL);
   setField("#rToI", st.bL);
+  syncStars();
   if(st.pick) return;
   setPicking(false);
   $("#rFromI").setAttribute("aria-expanded","false");
