@@ -154,6 +154,16 @@ button{cursor:pointer}
    while you are deciding where to walk. */
 #zoomctl .zfit svg{width:15px;height:15px;fill:none;stroke:currentColor;
   stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+/* Where you are. Off: an outline. Following you: filled, the same pressed look
+   as every other toggle here. Fixing: a slow pulse, because a first fix can
+   take seconds outdoors and a button that does nothing for that long reads as
+   broken. Hidden wherever the page cannot have a location at all. */
+#btnLoc svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;
+  stroke-linecap:round}
+#btnLoc[aria-pressed="true"] svg circle.c{fill:currentColor}
+#btnLoc.busy{animation:locpulse 1.2s ease-in-out infinite}
+@keyframes locpulse{50%{opacity:.45}}
+#btnLoc[hidden]{display:none}
 
 /* ---------- stale-build prompt ---------- */
 /* GitHub Pages serves index.html with max-age=600 and offers no way to change
@@ -169,6 +179,17 @@ button{cursor:pointer}
   background:var(--panel);color:var(--ink);box-shadow:var(--shadow);
   font-size:12.5px;font-weight:500;white-space:nowrap}
 #fresh[hidden]{display:none}
+/* Two small things that float over the map: a one-line note (a location that
+   is off the map, a refused permission), and the way back to the present once
+   the clock has been moved. Both top-left under the masthead, out of the
+   route card's way on a phone. */
+#toast,#btnNow{position:absolute;z-index:8;left:12px;top:calc(76px + env(safe-area-inset-top,0px));
+  border:1px solid var(--line);background:var(--panel);color:var(--ink);box-shadow:var(--shadow);
+  font-size:12px;line-height:1.4}
+#toast{right:64px;max-width:340px;padding:8px 12px;border-radius:10px}
+#btnNow{padding:7px 12px;border-radius:999px;font-weight:600}
+#toast[hidden],#btnNow[hidden]{display:none}
+#toast:not([hidden])~#btnNow{top:calc(124px + env(safe-area-inset-top,0px))}
 
 /* ---------- legend ---------- */
 #legend{position:absolute;z-index:5;left:12px;bottom:12px;pointer-events:none;
@@ -481,7 +502,12 @@ tr.row:hover td{background:var(--panel-2)}
       <button class="iconbtn" id="btnZin"  title="Zoom in (+)"   aria-label="Zoom in">&#43;</button>
       <button class="iconbtn" id="btnZout" title="Zoom out (−)" aria-label="Zoom out">&#8722;</button>
       <button class="iconbtn zfit" id="btnZfit" title="Whole city (0)" aria-label="Show the whole city"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/></svg></button>
+      <button class="iconbtn" id="btnLoc" title="Where am I?" aria-label="Show where I am"
+              aria-pressed="false" hidden><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="5.2"/><circle class="c" cx="9" cy="9" r="2"/><path d="M9 1v2.4M9 14.6V17M1 9h2.4M14.6 9H17"/></svg></button>
     </div>
+
+    <div id="toast" role="status" hidden></div>
+    <button id="btnNow" hidden>&#8634; Back to now</button>
 
     <button id="fresh" hidden>A newer version is ready &#183; <b>Reload</b></button>
 
@@ -874,7 +900,7 @@ const AWAY = (()=>{ try{
   return Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Rome"
     ? "" : " · Rome";
 }catch(e){ return " · Rome"; } })();
-const st = {mo:NOW.mo, day:NOW.day, ti:NOW.ti, scale:1, cx:0, cy:0, sel:-1, hi:null,
+const st = {mo:NOW.mo, day:NOW.day, ti:NOW.ti, live:true, scale:1, cx:0, cy:0, sel:-1, hi:null,
             routing:false, a:-1, b:-1, k:1.2, route:null, refRoute:null,
             aL:"", bL:"", pick:null, mapPick:null, via:false};
 const dateIdx = () => st.mo*2 + (st.day===15?1:0);
@@ -1162,6 +1188,7 @@ function drawOver(){
   }
   drawNasoni(ctx);
   drawLabels(ctx);
+  drawMe(ctx);
   if(st.hi && st.hi.length){
     const wIn = Math.max(4.5, Math.min(14, st.scale*7));
     draw(st.hi, C.ink, wIn+5);
@@ -1568,7 +1595,7 @@ function bindStrip(sel, out, back){
   const cv=$(sel);
   const slotAt = e => { const r=cv.getBoundingClientRect();
     return Math.round(Math.max(0,Math.min(31,(e.clientX-r.left-3)/(r.width-6)*31))); };
-  const goTo = t => { st.ti=t; updateReadouts(); schedule(false); };
+  const goTo = t => { st.ti=t; leaveNow(); updateReadouts(); schedule(false); };
   cv.addEventListener("pointermove", e=>{
     const v=cv._vals; if(!v) return;
     const t=slotAt(e);
@@ -2073,6 +2100,11 @@ function applyGeoStatus(){
 }
 function useGeo(){
   const btn=$("#pickGeo");
+  // the dot already knows: no need to wait for the GPS a second time
+  if(me.t && me.inside && Date.now() - me.t < 60000){
+    const n=nearestNode(me.x, me.y);
+    if(n>=0){ setEnd(st.pick, n, "My location \u00b7 "+labelForNode(n)); return; }
+  }
   btn.textContent="Locating\u2026"; btn.disabled=true;
   navigator.geolocation.getCurrentPosition(pos=>{
     btn.textContent="Use my location"; btn.disabled=false;
@@ -2105,6 +2137,128 @@ function useGeo(){
   }, {enableHighAccuracy:true, timeout:12000, maximumAge:60000});
 }
 
+/* ---------- a one-line note over the map ---------- */
+let toastT = 0;
+function toast(msg, ms){
+  const t = $("#toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, ms || 6000);
+}
+
+/* ---------- now ---------- */
+/* The clock follows the real one until you move it. An app left open on a
+   phone used to sit on whatever half-hour it was opened at, so the map you
+   glanced at after lunch was the morning's. While it is live it re-reads the
+   time every 30 s and whenever the app comes back to the front; moving the
+   hour or the date by hand leaves it where you put it, and "Back to now"
+   appears to return. */
+function leaveNow(){ if(st.live){ st.live = false; $("#btnNow").hidden = false; } }
+function goNow(){
+  const n = nowFrame();
+  const moved = n.mo !== st.mo || n.day !== st.day || n.ti !== st.ti;
+  st.live = true; $("#btnNow").hidden = true;
+  if(!moved) return;
+  st.mo = n.mo; st.day = n.day; st.ti = n.ti;
+  if(H) { updateReadouts(); schedule(false); }
+}
+setInterval(() => { if(st.live && !document.hidden) goNow(); }, 30000);
+document.addEventListener("visibilitychange", () => { if(!document.hidden && st.live) goNow(); });
+
+/* ---------- where you are ---------- */
+/* A dot for you, and a map that follows it. Drawn in ink and panel like the
+   pins and the nasoni: every hue on this map is a shade percentage, and a blue
+   "you" would read as a shaded street. The halo is the fix's own accuracy, so
+   a 60 m indoor fix looks like one. Dragging the map stops it following - you
+   are looking somewhere else - and the button brings it back; pressed while
+   following, it switches location off. */
+const me = {watch:null, x:0, y:0, acc:0, t:0, follow:false, inside:false, auto:false};
+const ME_ZOOM = 0.9;      // px per metre: streets and their names, and the nasoni
+function syncLocBtn(){
+  const b = $("#btnLoc");
+  b.setAttribute("aria-pressed", me.watch !== null && me.follow ? "true" : "false");
+  b.classList.toggle("busy", me.watch !== null && !me.t);
+  b.title = me.watch === null ? "Where am I?" : (me.follow ? "Stop showing where I am" : "Back to where I am");
+}
+function meXY(pos){
+  return [(pos.coords.longitude - H.proj.lon0)*H.proj.mperlon,
+          (pos.coords.latitude  - H.proj.lat0)*H.proj.mperlat];
+}
+function offMap(x, y){
+  const b = H.bbox;
+  const dx = Math.max(b.x0 - x, 0, x - b.x1), dy = Math.max(b.y0 - y, 0, y - b.y1);
+  return Math.hypot(dx, dy);
+}
+function centreOnMe(){
+  if(st.scale < ME_ZOOM*0.6) st.scale = ME_ZOOM;
+  st.cx = me.x; st.cy = me.y; syncZoomBtns(); schedule(true);
+}
+function startLocate(auto){
+  if(geoStatus() !== "ok") return;
+  me.follow = true; me.auto = !!auto;
+  if(me.watch === null){
+    me.watch = navigator.geolocation.watchPosition(onFix, onFixErr,
+      {enableHighAccuracy:true, maximumAge:15000, timeout:20000});
+  } else if(me.t && me.inside) centreOnMe();
+  syncLocBtn();
+}
+function stopLocate(){
+  if(me.watch !== null) navigator.geolocation.clearWatch(me.watch);
+  me.watch = null; me.t = 0; me.follow = false; me.inside = false;
+  syncLocBtn(); schedule(false);
+}
+function onFix(pos){
+  const first = !me.t;
+  [me.x, me.y] = meXY(pos); me.acc = pos.coords.accuracy || 0; me.t = Date.now();
+  const away = offMap(me.x, me.y);
+  me.inside = away < 300;
+  if(!me.inside){
+    // someone planning from home: say so once, and stop asking the GPS
+    if(!me.auto) toast("You're " + fmtLen(away) + " from the edge of this map, which covers the "+
+                       "historic centre. It will show you once you're in it.");
+    stopLocate(); me.auto = false; return;
+  }
+  me.auto = false;
+  if(me.follow) centreOnMe(); else schedule(false);
+  if(first) syncLocBtn();
+}
+function onFixErr(err){
+  const auto = me.auto; stopLocate(); me.auto = false;
+  if(auto) return;                       // nobody asked; nothing to apologise for
+  toast(err.code === 1
+    ? "Location is turned off for this page. Turn it on in your browser or phone settings."
+    : err.code === 2 ? "Your phone couldn't get a fix — common indoors. Try again outside."
+    : "Location timed out. Try again in a moment.");
+}
+function drawMe(ctx){
+  if(me.watch === null || !me.t || !me.inside) return;
+  const x = sx(me.x), y = sy(me.y);
+  if(x < -60 || x > W+60 || y < -60 || y > Hh+60) return;
+  const halo = me.acc * st.scale;
+  if(halo > 9){
+    ctx.beginPath(); ctx.arc(x, y, Math.min(halo, Math.max(W, Hh)), 0, 7);
+    ctx.globalAlpha = 0.10; ctx.fillStyle = C.ink; ctx.fill();
+    ctx.globalAlpha = 0.35; ctx.lineWidth = 1; ctx.strokeStyle = C.ink; ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  ctx.beginPath(); ctx.arc(x, y, 8.5, 0, 7); ctx.fillStyle = C.panel; ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, 6, 0, 7); ctx.fillStyle = C.ink; ctx.fill();
+}
+$("#btnLoc").addEventListener("click", () => {
+  if(me.watch !== null && me.follow) stopLocate();
+  else startLocate(false);
+});
+$("#btnNow").addEventListener("click", goNow);
+/* Here, at launch - but only where the answer is already yes. Asking for a
+   location the moment the page opens, before anyone has done anything, is the
+   prompt people learn to refuse; once granted, an app that opens on you is
+   what they installed it for. If you are not on the map, it says nothing. */
+function locateIfAllowed(){
+  const btn = $("#btnLoc");
+  btn.hidden = geoStatus() !== "ok";
+  if(btn.hidden || !navigator.permissions || !navigator.permissions.query) return;
+  navigator.permissions.query({name:"geolocation"})
+    .then(p => { if(p.state === "granted") startLocate(true); }).catch(()=>{});
+}
+
 /* ---------- picking ---------- */
 function pick(px,py){
   const wx=ux(px), wy=uy(py), R=Math.max(10, 16/st.scale);
@@ -2124,7 +2278,7 @@ function pick(px,py){
 
 /* ---------- interaction ---------- */
 let ptrs=new Map(), lastDist=0, moved=0, dragging=false;
-const UIHIT = '#top, #zoomctl, #card, #rcard, #sheet, #legend, #fresh';
+const UIHIT = '#top, #zoomctl, #card, #rcard, #sheet, #legend, #fresh, #toast, #btnNow';
 stage.addEventListener("pointerdown", e=>{
   if(e.target.closest && e.target.closest(UIHIT)) return;   // let the controls have the tap
   stage.setPointerCapture(e.pointerId);
@@ -2149,6 +2303,7 @@ stage.addEventListener("pointermove", e=>{
   } else {
     st.cx -= dx/st.scale; st.cy += dy/st.scale; clampView(); schedule(true);
   }
+  if(moved > 8 && me.follow){ me.follow = false; syncLocBtn(); }
 });
 function endPtr(e){
   if(ptrs.size===1 && moved<8 && dragging){
@@ -2237,7 +2392,7 @@ function clampView(){
 }
 
 /* ---------- controls ---------- */
-$("#time").addEventListener("input", e=>{ st.ti=+e.target.value; updateReadouts(); schedule(false); });
+$("#time").addEventListener("input", e=>{ st.ti=+e.target.value; leaveNow(); updateReadouts(); schedule(false); });
 /* Collapsed by default on a phone, and remembered: someone who wants the map
    big wants it big every time. Storage throws in a private window, so every
    access is guarded and the default survives it. */
@@ -2587,18 +2742,19 @@ const BOOT = {};
     // months
     const mc=$("#months");
     mc.querySelectorAll(".dy").forEach(b=>b.addEventListener("click",()=>{
-      st.day=+b.dataset.d; updateReadouts(); schedule(false); }));
+      st.day=+b.dataset.d; leaveNow(); updateReadouts(); schedule(false); }));
     MONTH.forEach((m,i)=>{ const b=document.createElement("button");
       b.className="mo"; b.textContent=m; b.setAttribute("aria-pressed", i===st.mo);
-      b.addEventListener("click",()=>{ st.mo=i; updateReadouts(); schedule(false); });
+      b.addEventListener("click",()=>{ st.mo=i; leaveNow(); updateReadouts(); schedule(false); });
       mc.appendChild(b); });
 
     resize();
     fitAll();
     updateReadouts(); drawAll(); renderList(); lap("draw");
+    locateIfAllowed();
     window.ombra = {st, BOOT, setPoint, setEnd, openPick, searchDest, entryXY, recompute, rampInk,
                     BUILD, checkFresh,
-                    renderRoute, frameIndex, nearestNode, labelForNode, nasoNodes, loadDate,
+                    renderRoute, frameIndex, nearestNode, labelForNode, nasoNodes, loadDate, me, goNow,
                     nodeXY:i=>[NODEX[i],NODEY[i]], comp:i=>COMP[i], bigc:()=>BIGC,
                     screenXY:i=>[sx(NODEX[i]),sy(NODEY[i])],   // where it is on screen now
                     get data(){return D}, get head(){return H}};

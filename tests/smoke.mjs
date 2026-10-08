@@ -608,6 +608,91 @@ async function installable(){
   srv.close();
 }
 
+// Where you are, and now. Chromium, a phone, a faked GPS fix.
+async function hereAndNow(){
+  console.log('');
+  console.log('Chromium, here and now (location dot, follow, live clock)');
+  const browser = await chromium.launch(EXE.chromium ? { executablePath: EXE.chromium } : {});
+  const booted = p => p.waitForFunction(() => document.querySelector('#loading').style.display === 'none',
+                                        { timeout: 45000 });
+  // where the Pantheon is, in degrees, from the page's own place list
+  let ctx = await browser.newContext({ ...devices['iPhone 13'] });
+  let p = await ctx.newPage();
+  await p.goto(url); await booted(p);
+  const pan = await p.evaluate(() => {
+    const o = window.ombra, H = o.head, e = o.searchDest('Pantheon')[0], [x, y] = o.entryXY(e);
+    return { lat: H.proj.lat0 + y / H.proj.mperlat, lon: H.proj.lon0 + x / H.proj.mperlon, x, y };
+  });
+  check('nothing asks for location at launch when it was never allowed', await p.evaluate(() =>
+    window.ombra.me.watch === null));
+  await ctx.close();
+
+  // already granted: the app opens on you, following
+  ctx = await browser.newContext({ ...devices['iPhone 13'], permissions: ['geolocation'],
+                                   geolocation: { latitude: pan.lat, longitude: pan.lon, accuracy: 25 } });
+  p = await ctx.newPage();
+  const errs = []; p.on('pageerror', e => errs.push(e.message));
+  await p.goto(url); await booted(p);
+  await p.waitForFunction(() => window.ombra.me.t > 0, { timeout: 10000 }).catch(() => {});
+  const on = await p.evaluate(() => { const o = window.ombra, me = o.me, st = o.st;
+    return { follow: me.follow, inside: me.inside, d: Math.hypot(st.cx - me.x, st.cy - me.y),
+             pressed: document.querySelector('#btnLoc').getAttribute('aria-pressed'),
+             shown: !document.querySelector('#btnLoc').hidden }; });
+  check('with location already allowed, it opens on you and follows',
+        on.shown && on.inside && on.follow && on.d < 1 && on.pressed === 'true', JSON.stringify(on));
+  // dragging means looking elsewhere
+  const sb = await p.locator('#stage').boundingBox();
+  await p.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2); await p.mouse.down();
+  await p.mouse.move(sb.x + sb.width / 2 + 120, sb.y + sb.height / 2 + 60, { steps: 4 }); await p.mouse.up();
+  check('dragging the map stops it following', await p.evaluate(() =>
+    !window.ombra.me.follow && document.querySelector('#btnLoc').getAttribute('aria-pressed') === 'false'));
+  await p.click('#btnLoc'); await p.waitForTimeout(200);
+  check('the button brings it back', await p.evaluate(() => { const o = window.ombra;
+    return o.me.follow && Math.hypot(o.st.cx - o.me.x, o.st.cy - o.me.y) < 1; }));
+  await p.click('#btnLoc'); await p.waitForTimeout(100);
+  check('and pressed while following, switches location off',
+        await p.evaluate(() => window.ombra.me.watch === null));
+  // the route picker takes the fix it already has
+  await p.click('#btnLoc'); await p.waitForTimeout(400);
+  await p.click('#btnRoute'); await p.waitForTimeout(300);
+  await p.click('#pickGeo'); await p.waitForTimeout(300);
+  check('"Use my location" takes the fix the dot already has',
+        /^My location/.test(await p.inputValue('#rFromI')), await p.inputValue('#rFromI'));
+  await p.click('#rClose'); await p.waitForTimeout(200);
+
+  // now: live until the clock is moved, and back on request
+  const live0 = await p.evaluate(() => window.ombra.st.live && document.querySelector('#btnNow').hidden);
+  check('the clock starts live', live0);
+  await p.evaluate(() => { const el = document.querySelector('#time');
+    el.value = (+el.value + 6) % 32; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  const moved = await p.evaluate(() => !window.ombra.st.live && !document.querySelector('#btnNow').hidden);
+  check('moving it by hand leaves it there, and offers the way back', moved);
+  await p.click('#btnNow'); await p.waitForTimeout(100);
+  const back = await p.evaluate(() => {
+    const st = window.ombra.st, n = new Date();
+    const ti = Math.max(0, Math.min(31, Math.round((n.getHours() + n.getMinutes() / 60 - 6) * 2)));
+    return { live: st.live, ti: st.ti, want: ti, hidden: document.querySelector('#btnNow').hidden };
+  });
+  check('"Back to now" returns to the present', back.live && back.hidden && Math.abs(back.ti - back.want) <= 1,
+        `slot ${back.ti} vs ${back.want}`);
+  check('no page errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+
+  // granted, but far away: it says nothing at launch, and explains when asked
+  ctx = await browser.newContext({ ...devices['iPhone 13'], permissions: ['geolocation'],
+                                   geolocation: { latitude: 48.8566, longitude: 2.3522 } });   // Paris
+  p = await ctx.newPage();
+  await p.goto(url); await booted(p); await p.waitForTimeout(1500);
+  check('far from Rome, it opens quietly on the map', await p.evaluate(() =>
+    document.querySelector('#toast').hidden && window.ombra.me.watch === null));
+  await p.click('#btnLoc');
+  const note = await p.waitForFunction(() => !document.querySelector('#toast').hidden, { timeout: 8000 })
+                      .then(() => p.textContent('#toast'), () => '');
+  check('and when asked, says how far off the map you are', /from the edge of this map/.test(note),
+        note.slice(0, 50));
+  await browser.close();
+}
+
 async function freshness(){
   console.log('');
   console.log('Chromium, served over HTTP (how Pages serves it)');
@@ -664,6 +749,7 @@ await run(chromium, 'Chromium', false, 'chromium');
 await run(webkit, 'WebKit', false, 'webkit');
 await run(webkit, 'WebKit with the Streams API broken (iOS Quick Look)', true, 'webkit');
 await desktopLayout();
+await hereAndNow();
 await freshness();
 await installable();
 console.log(`\n${failures ? failures + ' CHECKS FAILED' : 'all checks passed'}`);
