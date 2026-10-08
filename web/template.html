@@ -209,6 +209,16 @@ button{cursor:pointer}
 #legend.naso .nasorow{display:flex}
 #legend .nasorow i{flex:0 0 auto;width:7px;height:7px;border-radius:50%;
   background:var(--panel);border:1.4px solid var(--ink)}
+/* Churches share the row's rules: there only while they are being drawn. The
+   key is the two marks themselves - filled is open at the time on the clock,
+   hollow and faint is closed - because that is the only thing they say. */
+#legend .chrow{display:none;align-items:center;gap:6px;margin-top:5px;font-size:10px;
+  color:var(--ink-2);font-weight:500}
+#legend.church .chrow{display:flex}
+#legend.church:not(.naso) .chrow{margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}
+#legend .chrow i{flex:0 0 auto;width:8px;height:8px;border-radius:2px;border:1.4px solid var(--ink)}
+#legend .chrow i.o{background:var(--ink)}
+#legend .chrow i.c{background:var(--panel);opacity:.55;margin-left:4px}
 
 /* ---------- console ---------- */
 /* On a phone the console was 49% of the screen - the month grid alone is 101px -
@@ -523,6 +533,7 @@ tr.row:hover td{background:var(--panel-2)}
       <div class="bar"></div>
       <div class="ends"><span>Full sun</span><span>50%</span><span>Full shade</span></div>
       <div class="nasorow"><i></i>Nasone &#8212; drinkable, all year</div>
+      <div class="chrow"><i class="o"></i>Church, open <i class="c"></i>closed</div>
     </div>
 
     <div id="card">
@@ -1041,6 +1052,66 @@ function drawNasoni(ctx){
   }
 }
 
+/* ---------- churches: cool, and open or not ---------- */
+/* A church is the coolest room in Rome, but only when it is open, so only the
+   ones whose hours the build could read are here (59 of the 314 in the bbox):
+   no hours, no mark. Open or closed is worked out for the day and the time on
+   the clock, so moving the scrubber to 16:00 shows what will be open when you
+   get there. Hours are OpenStreetMap's and only some carry a check date, which
+   is why a tap says so instead of sounding sure. Ink and panel, a square to
+   tell them from the nasoni's circles, at the nasoni's zoom. */
+function shownDay(){
+  const y = new Date().getFullYear();
+  const mo = st.today ? st.today.mo : st.mo, d = st.today ? st.today.d : st.day;
+  const wd = (new Date(y, mo, d).getDay() + 6) % 7;          // Monday = 0
+  return {mo, wd};
+}
+function churchHours(rules, mo, wd){
+  let iv = null;                      // a later rule replaces an earlier one
+  for(const [mm, dd, v] of rules) if((mm >> mo) & 1 && (dd >> wd) & 1) iv = v;
+  return iv || [];
+}
+const hm = m => String(Math.floor(m/60) % 24).padStart(2,"0") + ":" + String(m%60).padStart(2,"0");
+function churchStatus(i, at){
+  const c = H.ch[i], {mo, wd} = shownDay(), t = at === undefined ? 360 + st.ti*30 : at;
+  const iv = churchHours(c[3], mo, wd);
+  for(let k=0;k<iv.length;k+=2) if(t >= iv[k] && t < iv[k+1]) return {open:true, until:iv[k+1]};
+  for(let k=0;k<iv.length;k+=2) if(iv[k] > t) return {open:false, from:iv[k]};
+  return {open:false, from:null};
+}
+const chX = i => H.ox + H.ch[i][1]*H.qs, chY = i => H.oy + H.ch[i][2]*H.qs;
+function drawChurches(ctx){
+  $("#legend").classList.toggle("church", !!H.ch && st.scale >= NASO_ZOOM);
+  if(!H.ch || st.scale < NASO_ZOOM) return;
+  const s = Math.max(3.2, Math.min(4.6, st.scale*4.6));
+  for(let i=0;i<H.ch.length;i++){
+    const x = sx(chX(i)), y = sy(chY(i));
+    if(x < -10 || x > W+10 || y < -10 || y > Hh+10) continue;
+    const open = churchStatus(i).open;
+    ctx.globalAlpha = open ? 1 : 0.55;
+    ctx.beginPath(); ctx.rect(x-s, y-s, 2*s, 2*s);
+    ctx.fillStyle = open ? C.ink : C.panel; ctx.fill();
+    ctx.lineWidth = 1.4; ctx.strokeStyle = C.ink; ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+function pickChurch(px, py){
+  if(!H.ch || st.scale < NASO_ZOOM) return -1;
+  let best = -1, bd = 16*16;
+  for(let i=0;i<H.ch.length;i++){
+    const dx = sx(chX(i)) - px, dy = sy(chY(i)) - py, d = dx*dx + dy*dy;
+    if(d < bd){ bd = d; best = i; }
+  }
+  return best;
+}
+function tellChurch(i){
+  const s = churchStatus(i), at = fmtTime(st.ti);
+  const when = s.open ? "open at " + at + ", until " + hm(s.until)
+             : s.from !== null ? "closed at " + at + ", opens " + hm(s.from)
+             : "closed for the rest of the day";
+  toast(H.ch[i][0] + " \u2014 " + when + ". Hours from OpenStreetMap; worth checking at the door.", 7000);
+}
+
 /* Which fountains are on a route, and the longest stretch of it without one.
    The count on its own cannot tell you what you want to know: four fountains
    clustered round the Pantheon end is not the same walk as four spread along
@@ -1283,6 +1354,9 @@ function drawOver(){
   }
   drawNasoni(ctx);
   drawLabels(ctx);
+  // over the labels: a church's own name is usually right on top of it, and
+  // the mark is the thing to tap
+  drawChurches(ctx);
   drawMe(ctx);
   if(st.hi && st.hi.length){
     const wIn = Math.max(4.5, Math.min(14, st.scale*7));
@@ -1496,6 +1570,12 @@ detour the same as a metre without water. On 300 random dry walks of 0.8\u20132.
 14:00 in July, that took the median dry stretch from 841&nbsp;m to 581&nbsp;m for a median
 17&nbsp;m more walking. Private, customers-only and disused taps are left out; nothing
 here knows whether a particular one is switched off today.</li>
+<li><b>__NCHOPEN__ churches</b> of the __NCHURCH__ on the map, the ones whose opening hours
+OpenStreetMap carries in a form the build can read: as refuges from the heat, they are only
+any use when open. Filled means open at the time on the clock, hollow closed. Seasonal
+hours tied to the clock change are not read, and those churches are left off rather than
+guessed. Hours change and few entries say when they were last checked, so treat them as
+a good guess, not a promise.</li>
 <li><b>Terrain</b> from the AWS Open Data terrain tiles (SRTM-derived, ~30&nbsp;m),
 sampled onto a 10&nbsp;m grid covering the map plus a 2&nbsp;km margin so hills outside
 the frame still cast into it.</li>
@@ -1571,6 +1651,8 @@ function openSheet(tab){
      .replace("__NKNOWN__", H.nknown ? H.nknown.toLocaleString("en") : "2,443")
      .replace("__NCAD__", H.ncad ? H.ncad.toLocaleString("en") : "8,180")
      .replace("__NNASO__", H.nnaso ? H.nnaso.toLocaleString("en") : "460")
+     .replace("__NCHOPEN__", H.ch ? String(H.ch.length) : "59")
+     .replace("__NCHURCH__", H.nchurch ? String(H.nchurch) : "314")
      .replace("__NIMP__", (H.nbld && H.nknown && H.ncad)
         ? (H.nbld - H.nknown - H.ncad).toLocaleString("en") : "3,535")
      // counted off the payload rather than typed in: the street total read
@@ -2464,6 +2546,8 @@ function endPtr(e){
     const r=stage.getBoundingClientRect();
     if(st.routing){ setPoint(ux(e.clientX-r.left), uy(e.clientY-r.top)); }
     else {
+      const c=pickChurch(e.clientX-r.left, e.clientY-r.top);
+      if(c>=0){ tellChurch(c); ptrs.delete(e.pointerId); if(ptrs.size===0){ dragging=false; stage.classList.remove("drag"); } return; }
       const i=pick(e.clientX-r.left, e.clientY-r.top);
       if(i>=0) selectSeg(i); else { st.hi=null; st.sel=null; $("#card").classList.remove("open"); schedule(false); }
     }
@@ -2916,7 +3000,7 @@ const BOOT = {};
     locateIfAllowed();
     window.ombra = {st, BOOT, setPoint, setEnd, openPick, searchDest, entryXY, recompute, rampInk,
                     BUILD, checkFresh,
-                    renderRoute, frameIndex, sunAt, solarPos, romeTZ, nearestNode, labelForNode, nasoNodes, loadDate, me, goNow,
+                    renderRoute, frameIndex, churchStatus, sunAt, solarPos, romeTZ, nearestNode, labelForNode, nasoNodes, loadDate, me, goNow,
                     nodeXY:i=>[NODEX[i],NODEY[i]], comp:i=>COMP[i], bigc:()=>BIGC,
                     screenXY:i=>[sx(NODEX[i]),sy(NODEY[i])],   // where it is on screen now
                     get data(){return D}, get head(){return H}};

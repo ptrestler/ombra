@@ -43,7 +43,7 @@ so scripts run from any directory.
 | `build_artifact.py` | template + payload, no shell — for publishing | `build/artifact.html` |
 
 Supporting modules: `geo.py` (local metre projection), `solar.py` (NOAA solar
-position), `heights.py` (OSM height tags → metres, plus the cadastre lookup),
+position), `hours.py` (OSM `opening_hours` → a schedule, or a refusal), `heights.py` (OSM height tags → metres, plus the cadastre lookup),
 `buildings.py` (the outlines, shared by the build and the report),
 `streets.py` (segmentation).
 
@@ -289,6 +289,25 @@ choosing a date leaves it, and **Back to now** restores both. Saved places are
 stored as positions, not node numbers — every rebuild renumbers the nodes and a
 saved hotel would quietly move — and matched back within 25 m.
 
+**Churches are shown only where their hours can be read.** A church is the
+coolest room in Rome when it is open, and only then. Of the 314 named churches
+in the bbox, 63 carry `opening_hours` in OpenStreetMap — but they are the ones
+visitors look for: the Pantheon, Minerva, San Luigi, Sant'Agnese, Santa Maria in
+Trastevere, Sant'Andrea della Valle, the Gesù. A church with readable hours is
+within 300 m of 45 % of street segments, within 500 m of 64 %. `hours.py`
+parses a deliberate subset at build time — month ranges, weekday lists, times,
+`off`, later rules overriding earlier ones — and *refuses* the rest (`Su[-1]`
+clock-change rules, a bare `closed`, comma-joined rules), so those churches are
+left off rather than guessed: 59 ship. Public holidays are dropped from day
+lists because the page cannot know them. The page evaluates each schedule for
+the day and hour on the clock, so scrubbing to 16:00 shows what will be open
+then. Only 10 of the 63 carry a check date, which is why the tap says "worth
+checking at the door" rather than sounding sure. Marks are ink squares (filled
+open, hollow closed) at the nasoni's zoom, drawn *over* the place labels — a
+church's own name sits on top of it, and the mark is what you tap. The parser
+has its own checks in `tests/validate.py`; `python3 hours.py` lists what it
+refused.
+
 **"Route via one" is scored on the dry stretch, not on the detour.** The
 obvious rule — the fountain that adds least — chose one the walk already passed
 97 % of the time: median detour 0 m, and every dry walk exactly as dry. The
@@ -481,11 +500,9 @@ patchy — some leafy streets score drier than they feel.
 
 ## Possible next steps
 
-- **Cool refuges.** Churches and shaded squares, as places to stop rather than
-  walk through. Deliberately left out of the nasoni change: a church is only a
-  refuge when it is open, and nothing in the pipeline knows opening hours, so the
-  map would be promising something it cannot check. Needs `opening_hours` parsing
-  before it is honest.
+- ~~**Cool refuges.**~~ Done for churches, as far as the data honestly goes —
+  see "Churches are shown only where their hours can be read" above. Parks are
+  not worth it: 3 of 47 carry hours.
 - ~~**The 3,535 heights still guessed, via footprint overlap.**~~ Tried and
   measured: it does not pay. See below — `measure_overlap.py` is the receipt.
   If you want those buildings measured rather than estimated, the cadastre is

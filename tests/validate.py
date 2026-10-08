@@ -106,5 +106,18 @@ check("mean node degree looks like a street network", 2.3 <= 2*len(G["eU"])/live
 check("dead ends under 10%", (deg[live] == 1).mean() < 0.10,
       f"{(deg[live]==1).mean()*100:.1f}%")
 
+print("\nopening hours")
+from hours import parse as ph
+check("plain week reads", ph("Mo-Sa 08:30-19:15; Su 09:00-17:45") ==
+      [(4095, 0b0111111, [510, 1155]), (4095, 0b1000000, [540, 1065])])
+g = ph("Oct-Jun Mo-Fr 07:30-12:30,16:30-19:30; Jul-Sep Mo-Fr 08:00-12:00")
+check("month ranges wrap the year", g and g[0][0] == 0b111000111111 and g[1][0] == 0b000111000000)
+check("public holidays are dropped, not guessed",
+      ph("Mo-Fr 08:00-20:00; Sa,Su,PH 10:30-13:00,14:00-19:30")[1][1] == 0b1100000)
+check("a closed day stays closed", ph("Mo-Su 09:00-18:00; Mo off")[1][2] == [])
+check("what it cannot read, it refuses",
+      all(ph(x) is None for x in ["closed", "Mar Su[-1]-Oct Su[-1] -1 day 08:00-19:00",
+                                   "sunrise-sunset", "Mo-Fr 08:00-12:00 \"by appointment\"", ""]))
+
 print(f"\n{'all checks passed' if not fails else str(len(fails)) + ' FAILED: ' + ', '.join(fails)}")
 sys.exit(1 if fails else 0)

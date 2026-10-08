@@ -413,6 +413,31 @@ async function run(engine, label, breakStreams, which) {
           naso.gap >= 400 ? /dry stretch/.test(naso.line) : naso.line === '',
           naso.line || '(silent, as it should be)');
     check('the legend explains them while they are on the map', naso.legend);
+    // Churches: only those whose hours were readable, open or not for the day
+    // and hour on the clock. The Pantheon's are Mo-Sa 08:30-19:15; Su 09:00-17:45.
+    const ch = await p.evaluate(() => {
+      const o = window.ombra, H = o.head, st = o.st;
+      const i = H.ch.findIndex(c => /^Pantheon$/.test(c[0]) || /Santa Maria ad Martyres/.test(c[0]));
+      const keep = { today: st.today, live: st.live };
+      // a Sunday and a Tuesday in October of whatever year the clock says
+      const y = new Date().getFullYear();
+      let sunD = 1; while (new Date(y, 9, sunD).getDay() !== 0) sunD++;
+      st.live = false;
+      st.today = { mo: 9, d: sunD };
+      const sun18 = o.churchStatus(i, 18 * 60), sun10 = o.churchStatus(i, 10 * 60);
+      st.today = { mo: 9, d: sunD + 2 };
+      const tue18 = o.churchStatus(i, 18 * 60), tue20 = o.churchStatus(i, 20 * 60);
+      Object.assign(st, keep);
+      return { n: H.ch.length, all: H.nchurch, name: i >= 0 ? H.ch[i][0] : null,
+               sun18, sun10, tue18, tue20 };
+    });
+    check('only churches with readable hours ride along', ch.n > 40 && ch.n < ch.all,
+          `${ch.n} of ${ch.all}`);
+    check('and each is open or closed for the day and hour on the clock',
+            ch.name && !ch.sun18.open && ch.sun10.open && ch.sun10.until === 17 * 60 + 45 &&
+            ch.tue18.open && ch.tue18.until === 19 * 60 + 15 && !ch.tue20.open && ch.tue20.from === null,
+            `${ch.name}: Sun 18:00 ${ch.sun18.open ? 'open' : 'closed'}, Tue 18:00 open until ${ch.tue18.until / 60 | 0}:${String(ch.tue18.until % 60).padStart(2, '0')}`);
+
 
     // Via a nasone: a dry walk offers the stop, and taking it bends the walk
     // through a fountain without breaking it into pieces
@@ -720,6 +745,23 @@ async function hereAndNow(){
   check('and the star takes it off the list again', await p.evaluate(() =>
     !localStorage.getItem('ombra.saved').includes('Hotel')));
   await p.click('#rClose'); await p.waitForTimeout(200);
+
+  // a tap on a church says whether it is open, with the caveat
+  const tap = await p.evaluate(() => {
+    const o = window.ombra, H = o.head, st = o.st, s = document.querySelector('#stage');
+    const i = H.ch.findIndex(c => c[0] === 'Pantheon');
+    st.scale = 0.9; st.cx = H.ox + H.ch[i][1] * H.qs; st.cy = H.oy + H.ch[i][2] * H.qs;
+    window.dispatchEvent(new Event('resize'));
+    const r = s.getBoundingClientRect();
+    return [r.left + r.width / 2, r.top + r.height / 2];
+  });
+  await p.waitForTimeout(400);
+  await p.mouse.click(tap[0], tap[1]); await p.waitForTimeout(300);
+  const said = await p.evaluate(() => { const t = document.querySelector('#toast');
+    return t.hidden ? '' : t.textContent; });
+  check('tapping a church says whether it is open, and where the hours come from',
+        /^Pantheon — (open|closed)/.test(said) && /OpenStreetMap/.test(said), said.slice(0, 60));
+  await p.click('#btnZfit'); await p.waitForTimeout(150);
 
   // now: live until the clock is moved, and back on request
   const live0 = await p.evaluate(() => window.ombra.st.live && document.querySelector('#btnNow').hidden);
