@@ -843,7 +843,18 @@ function checkFresh(){
     .then(t => {
       if(!t) return;
       const latest = t.trim();
-      if(latest && latest !== BUILD) $("#fresh").hidden = false;
+      if(!latest || latest === BUILD) return;
+      // Installed, the page comes from the service worker's cache, so reloading
+      // would only bring the same build back. Ask the worker to fetch the new
+      // one instead; the pill appears once it is ready to swap in.
+      // If the worker finds nothing new to install, it already holds a newer
+      // page than this one (the HTTP cache served an old copy on the way in),
+      // so a plain reload is the answer and the pill offers that.
+      if(navigator.serviceWorker && navigator.serviceWorker.controller)
+        navigator.serviceWorker.ready.then(r => r.update().then(() => {
+          if(!r.installing && !r.waiting) $("#fresh").hidden = false;
+        })).catch(()=>{});
+      else $("#fresh").hidden = false;
     })
     .catch(()=>{});          // offline, or no such file - both fine
 }
@@ -1412,6 +1423,10 @@ returns to the whole city. On a keyboard: <b>+</b> and <b>−</b> zoom, arrows p
 <li>The scrubber runs 06:00 to 21:30; the warm band marks daylight for that month.
 Drag it and watch the shade rotate out of the east-west streets around one in the
 afternoon. A route's own strip scrubs the same way, for that walk.</li>
+<li>The copy at <b>ptrestler.github.io/ombra</b> installs as an app: in Safari,
+Share &#8594; <b>Add to Home Screen</b>; in Chrome, <b>Install app</b>. It then opens
+full screen, works with no signal, and can use your location. When there is a newer
+build it says so, and switches over only when you tap.</li>
 </ul>
 </div>`;
 
@@ -2236,7 +2251,41 @@ $("#btnUnits").addEventListener("click", ()=>{
   applyUnits();
 });
 
-$("#fresh").addEventListener("click", ()=> location.reload());
+/* ---------- the installable app ---------- */
+/* Only the standalone document carries meta ombra-app, and only over http(s)
+   can a service worker run - so this is the Pages copy and nothing else: not
+   the artifact, whose shell is the platform's, and not a downloaded file. The
+   manifest link is added here rather than written into the shell for the same
+   reason: from file:// the browser would fetch it anyway and log the failure. */
+let SWREG = null, SWGO = false;
+function startApp(){
+  if(!document.querySelector('meta[name="ombra-app"]')) return;
+  if(!/^https?:$/.test(location.protocol) || !("serviceWorker" in navigator)) return;
+  for(const [rel, href] of [["manifest", "manifest.webmanifest"],
+                            ["apple-touch-icon", "icons/apple-touch-icon.png"]]){
+    const l = document.createElement("link"); l.rel = rel; l.href = href;
+    document.head.appendChild(l);
+  }
+  // a new build is only offered once it is installed and waiting, and never
+  // on a first visit, when there is nothing older on screen to replace
+  const offer = w => { if(w && navigator.serviceWorker.controller) $("#fresh").hidden = false; };
+  navigator.serviceWorker.register("sw.js").then(reg => {
+    SWREG = reg; offer(reg.waiting);
+    reg.addEventListener("updatefound", () => {
+      const w = reg.installing;
+      if(w) w.addEventListener("statechange", () => { if(w.state === "installed") offer(w); });
+    });
+  }).catch(()=>{});
+  // the first install claims the page too; only reload when it was asked for
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if(SWGO) location.reload(); });
+}
+startApp();
+
+$("#fresh").addEventListener("click", ()=>{
+  const w = SWREG && SWREG.waiting;
+  if(w){ SWGO = true; w.postMessage("skip"); }
+  else location.reload();
+});
 checkFresh();
 // and again when the tab comes back, which is when a phone has usually been
 // sitting on a stale copy

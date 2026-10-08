@@ -39,7 +39,7 @@ so scripts run from any directory.
 | `graph.py` | walking graph from segment geometry, junction-split | `build/graph.npz` |
 | `places.py` | searchable destinations + curated shortlist | `build/places_pack.json` |
 | `pack.py` | everything → one gzipped binary blob, base64 | `build/data.b64` |
-| `build_standalone.py` | template + payload + document shell | `dist/ombra-roma.html` |
+| `build_standalone.py` | template + payload + document shell; the app's manifest, service worker and icons | `dist/` |
 | `build_artifact.py` | template + payload, no shell — for publishing | `build/artifact.html` |
 
 Supporting modules: `geo.py` (local metre projection), `solar.py` (NOAA solar
@@ -224,6 +224,38 @@ CPU from ~6.8 s to 2.0 s. It hid for so long because it is invisible zoomed in,
 where culling leaves a few hundred outlines, and because nothing timed the
 boot by stage: `measure_boot.mjs` does now.
 
+**The Pages copy is an installable app, and nothing else is.** `build_standalone.py`
+writes `manifest.webmanifest`, `sw.js` and `icons/` beside the page and puts
+`<meta name="ombra-app">` in the standalone's head. `startApp()` only registers
+the service worker and adds the manifest link when that meta is there *and* the
+page came over http(s) — so not in the artifact (the platform's shell has no
+meta) and not from a downloaded `file://` copy (no service worker can run, and a
+static manifest link would be fetched and fail loudly). Three rules it depends on:
+
+- *`sw.js` carries the build stamp.* That is how a browser learns of a deploy:
+  Pages serves the page with `max-age=600`, but a service worker script is always
+  revalidated. A build that left `sw.js` byte-identical would never update an
+  installed copy.
+- *The worker never takes over by itself.* It installs, waits, and the page shows
+  the **Reload** pill; only the tap sends `skip`. Swapping the page under someone
+  mid-walk would lose their route.
+- *Installed, `checkFresh` asks the worker, not the page.* A reload would only
+  serve the same cached build, so a newer `version.txt` triggers `update()`; if
+  that finds nothing to install, the worker already holds the newer page (the
+  HTTP cache served an old one on the way in) and the pill offers a plain reload.
+
+`version.txt` always goes to the network, or no deploy could ever be seen. The
+worker precaches with `cache: "no-cache"` — revalidate, so a first visit gets a
+304 for the 6 MB it just downloaded and an update gets the new page rather than
+the HTTP cache's ten-minute-old one. Playwright's WebKit runs no service workers,
+so `tests/smoke.mjs` checks all of this in Chromium only: manifest and icon
+sizes, install, control, an offline boot, and a deploy offered and taken.
+If a broken build ever ships, an installed copy cannot show the pill that would
+replace it — but the browser still fetches the next `sw.js` on launch, and a
+waiting worker takes over once every window using the old one is closed. So the
+fix for a bad deploy is another deploy, and "close the app and reopen it" is
+what to tell anyone stuck on it.
+
 **"Route via one" is scored on the dry stretch, not on the detour.** The
 obvious rule — the fountain that adds least — chose one the walk already passed
 97 % of the time: median detour 0 m, and every dry walk exactly as dry. The
@@ -248,7 +280,10 @@ Three places the page ends up, and mixing them up wastes an afternoon:
   `deploy` job from the same build the tests ran against. Nothing is committed
   for it. This is the link to send someone: a top-level HTTPS document, so it is
   the only hosted copy where **geolocation works**. It is deployed with a `version.txt`
-  beside it, which is how the page spots a browser holding a cached build.
+  beside it, which is how the page spots a browser holding a cached build, and
+  with the manifest, service worker and icons that make it **installable**: Add to
+  Home Screen on iOS, Install app in Chrome. Installed, it opens full screen and
+  boots with no network.
 
 Two builds feed all of this:
 
