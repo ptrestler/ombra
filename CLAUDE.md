@@ -376,19 +376,21 @@ is smooth.
 is 29 MB of the 31 MB unpacked, and the page only ever reads one date of it, so
 each of the 24 dates (`head.ndate`, `head.slots` = 32 frames each) is its own
 gzip stream and boot inflates only the one it opens on. `D.shade` keeps its full
-`[segment][frame]` shape and `dateBase()` — which every shade read goes through —
-fills a date the first time it is asked for. Measured with `measure_boot.mjs`:
+`[segment][frame]` shape and `frameAt()` — which every shade read goes through,
+since today can be answered from any date — fills a date the first time it is
+asked for. Measured with `measure_boot.mjs`:
 boot 2.04 s → 0.91 s with the CPU slowed 4×, 0.49 s → 0.28 s on desktop. A date
 then costs 155 ms / 56 ms the first time you switch to it. The price is size:
 24 separate streams lose some of the segment-major compression, 2.76 → 3.56 MB
 of gzip, and the file grew 5.4 → 6.4 MB. Twelve monthly streams would have cost
 +20 % instead of +29 %, but they unpack twice as much at boot. Anything that
-reads `D.shade` without going through `dateBase()` must call
+reads `D.shade` without going through `frameAt()` must call
 `window.ombra.loadDate(d)` first — the smoke test does, and checks every date
 lands in its own frames against `head.city`.
 
 `window.ombra` exposes state and helpers (`st`, `head`, `data`, `setEnd`,
-`recompute`, `nearestNode`, `labelForNode`, `screenXY`, `loadDate`, `BOOT`) for debugging and for the
+`recompute`, `nearestNode`, `labelForNode`, `screenXY`, `loadDate`, `BOOT`, `sunAt`,
+`solarPos`, `me`) for debugging and for the
 tests.
 
 Nasoni ride along in two `u2` sections, `nax`/`nay`, quantised like everything
