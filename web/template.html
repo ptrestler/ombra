@@ -865,7 +865,9 @@ const st = {mo:NOW.mo, day:NOW.day, ti:NOW.ti, scale:1, cx:0, cy:0, sel:-1, hi:n
             routing:false, a:-1, b:-1, k:1.2, route:null, refRoute:null,
             aL:"", bL:"", pick:null, mapPick:null, via:false};
 const dateIdx = () => st.mo*2 + (st.day===15?1:0);
-const dateBase = () => dateIdx()*32;
+/* Every read of the shade goes through here for its date, so this is where a
+   date that has not been unpacked yet gets unpacked. */
+const dateBase = () => { const d = dateIdx(); loadDate(d); return d*32; };
 const dayLabel = () => (st.day===1?"1":"15");
 
 /* ---------- canvases ---------- */
@@ -1178,16 +1180,23 @@ const COMPASS = a => ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","
 function fmtTime(ti){ const h=6+Math.floor(ti/2), m=(ti%2)?"30":"00";
   return String(h).padStart(2,"0")+":"+m; }
 
-let cityAvg = null;
-function computeCityAvg(){
-  cityAvg = new Float32Array(H.nframe);
-  const step = Math.max(1, Math.floor(H.nseg/9000));
-  for(let f=0;f<H.nframe;f++){
-    let s=0,c=0;
-    for(let i=0;i<H.nseg;i+=step){ s+=D.shade[i*H.nframe+f]; c++; }
-    cityAvg[f]=s/c;
-  }
+/* Shade arrives one date at a time. The payload is the blob, then one gzip
+   stream per date (the 1st and 15th of each month, 32 half-hours each), and
+   boot unpacks only the date it opens on: the year is 29 MB unpacked and was
+   two-thirds of a phone's boot. D.shade keeps its full [segment][frame] shape,
+   so nothing that reads it had to change; a date's frames are copied into
+   place the first time dateBase() asks for them. A date costs 56 ms on a
+   desktop and 155 ms with the CPU slowed 4x, once (measure_boot.mjs, "date"). */
+let SHB = null;                 // base64 per date, dropped once unpacked
+function loadDate(d){
+  if(!SHB || !SHB[d]) return;
+  const c = gunzip(b64bytes(SHB[d])), S = H.slots, nf = H.nframe, o = d*S;
+  for(let i=0;i<H.nseg;i++) D.shade.set(c.subarray(i*S, i*S+S), i*nf + o);
+  SHB[d] = null;
 }
+// the city-wide mean per frame is the one figure that needs every date, so the
+// build works it out and ships it
+let cityAvg = null;
 
 function updateReadouts(){
   const fi = frameIndex(), m = H.frames[fi];
@@ -2472,7 +2481,8 @@ const BOOT = {};
   let t = performance.now();
   const lap = k => { const n = performance.now(); BOOT[k] = Math.round(n - t); t = n; };
   try{
-    const raw = document.getElementById("payload").textContent.trim();
+    const lines = document.getElementById("payload").textContent.trim().split("\n");
+    const raw = lines[0];
     $("#lmsg").textContent = "Unpacking shadows\u2026";
     const gz = b64bytes(raw); lap("b64");
     await new Promise(r=>setTimeout(r,16));          // let that message paint first
@@ -2492,11 +2502,12 @@ const BOOT = {};
     // without fountains, not fail to boot
     if(H.sections.nax){ D.naX=dq(view(buf,"nax"),ox); D.naY=dq(view(buf,"nay"),oy); }
     D.kind=view(buf,"kind"); D.name=view(buf,"name"); D.cov=view(buf,"cov");
-    D.shade=view(buf,"shade");
+    D.shade=new Uint8Array(H.nseg*H.nframe); SHB=lines.slice(1); cityAvg=H.city;
+    dateBase(); lap("date");
     D.eSeg=view(buf,"eSeg"); D.eI0=view(buf,"eI0"); D.eI1=view(buf,"eI1");
     D.eU=view(buf,"eU"); D.eV=view(buf,"eV"); D.eLen=view(buf,"eLen");
     lap("unpack");
-    prepSegs(); buildNameIndex(); computeCityAvg(); lap("segments");
+    prepSegs(); buildNameIndex(); lap("segments");
     readColors(); buildGraph(); lap("graph"); buildSearch(); lap("search");
 
     // months
@@ -2513,7 +2524,7 @@ const BOOT = {};
     updateReadouts(); drawAll(); renderList(); lap("draw");
     window.ombra = {st, BOOT, setPoint, setEnd, openPick, searchDest, entryXY, recompute, rampInk,
                     BUILD, checkFresh,
-                    renderRoute, frameIndex, nearestNode, labelForNode, nasoNodes,
+                    renderRoute, frameIndex, nearestNode, labelForNode, nasoNodes, loadDate,
                     nodeXY:i=>[NODEX[i],NODEY[i]], comp:i=>COMP[i], bigc:()=>BIGC,
                     screenXY:i=>[sx(NODEX[i]),sy(NODEY[i])],   // where it is on screen now
                     get data(){return D}, get head(){return H}};
