@@ -212,7 +212,7 @@ button{cursor:pointer}
   padding:10px 12px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -8px 24px rgba(0,0,0,.06)}
 .readrow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
 .clock{font-family:"Bodoni Moda",Georgia,serif;font-size:30px;font-weight:600;line-height:1;
-  font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  font-variant-numeric:tabular-nums;letter-spacing:-.01em;white-space:nowrap}
 .clock .dim{color:var(--muted);font-size:19px;font-weight:400}
 .sunfacts{text-align:right;font-size:11px;color:var(--muted);line-height:1.45;
   font-variant-numeric:tabular-nums}
@@ -867,11 +867,13 @@ const NOW = nowFrame();
 /* Every hour on this page is Rome's, and nothing said so. It does not need
    saying to someone standing in Rome, where their clock and the map's agree -
    only to someone reading it from another timezone, where the map opens on
-   their hour and means Rome's. */
+   their hour and means Rome's. "Rome", not "Rome time": on an iPhone the
+   longer one ran past the phone's width and dropped "time" onto a line of its
+   own, and beside a clock the city's name already says whose hour it is. */
 const AWAY = (()=>{ try{
   return Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Rome"
-    ? "" : " · Rome time";
-}catch(e){ return " · Rome time"; } })();
+    ? "" : " · Rome";
+}catch(e){ return " · Rome"; } })();
 const st = {mo:NOW.mo, day:NOW.day, ti:NOW.ti, scale:1, cx:0, cy:0, sel:-1, hi:null,
             routing:false, a:-1, b:-1, k:1.2, route:null, refRoute:null,
             aL:"", bL:"", pick:null, mapPick:null, via:false};

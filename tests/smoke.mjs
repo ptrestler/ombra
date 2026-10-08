@@ -44,6 +44,9 @@ async function run(engine, label, breakStreams, which) {
   check('boots', booted, `${Date.now() - t0} ms`);
   if (booted) {
     check('standards mode, not quirks', await p.evaluate(() => document.compatMode) === 'CSS1Compat');
+    // the clock and its date are one line; on an iPhone "· Rome time" wrapped
+    check('the clock reads on one line', await p.evaluate(() =>
+      document.querySelector('.clock').getBoundingClientRect().height < 45));
     check('no horizontal scroll at phone width',
           !(await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)));
     // data round-trip: these must match tests/validate.py exactly
