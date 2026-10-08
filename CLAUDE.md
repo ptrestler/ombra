@@ -43,11 +43,11 @@ so scripts run from any directory.
 | `build_artifact.py` | template + payload, no shell — for publishing | `build/artifact.html` |
 
 Supporting modules: `geo.py` (local metre projection), `solar.py` (NOAA solar
-position), `heights.py` (OSM height tags → metres, plus the cadastre lookup),
+position), `hours.py` (OSM `opening_hours` → a schedule, or a refusal), `heights.py` (OSM height tags → metres, plus the cadastre lookup),
 `buildings.py` (the outlines, shared by the build and the report),
 `streets.py` (segmentation).
 
-Five scripts that measure rather than build, none on the `make` path:
+Six scripts that measure rather than build, none on the `make` path:
 `measure_heights.py` (`make heights`) scores every height source against the OSM
 tags and prints the tables `heights.py` quotes; `compare_frames.py` diffs two
 `build/frames.npy` so a model change can be seen rather than assumed; and
@@ -56,7 +56,10 @@ footprint-overlap matching, which sounds like the obvious next win and is not;
 `measure_via.mjs` (needs a build) scores which fountain "Route via one"
 picks, on 300 random dry walks; and `measure_boot.mjs` (needs a build) times
 each boot stage at desktop speed and with the CPU slowed 4×, from the
-`window.ombra.BOOT` laps the page records.
+`window.ombra.BOOT` laps the page records; and `measure_dates.py` (needs a
+build, ~4 min) computes the real shade for the 8th and 23rd of every month
+with `shade.frame()` and scores the ways the page can stand in for a day it
+does not sample.
 
 ## How the shade model works
 
@@ -256,6 +259,55 @@ waiting worker takes over once every window using the old one is closed. So the
 fix for a bad deploy is another deploy, and "close the app and reopen it" is
 what to tell anyone stuck on it.
 
+**Today is answered with the closest sun, not the nearest date.** The model
+samples the 1st and 15th; every other day the page used to show the nearest of
+those at the same clock time. `measure_dates.py` scored that against the real
+shade of the 8th and 23rd of every month: **3.03 pp** mean error, 4.37 % of
+street-frames off by more than 20 — and **12.9 pp** around the clock changes,
+where 23 October at 14:00 was answered with 1 November at 14:00, after the
+clocks go back: an hour of sun away. Blending the two dates either side scored
+2.29. Taking the stored frame, from *any* date, whose sun is closest in the sky
+scored **1.63 pp** (2.37 %), 2.47 across the clock changes; blending the two
+closest suns did no better (1.67). Shade depends on the sun's direction and
+nothing else in this model, so 23 October is answered from 15 February, whose
+afternoon sun is 1° away. `solarPos` in the template is `solar.py` line for
+line, and the smoke test holds it to the build's own sun on all 768 frames
+(0.005° worst) and to `shade.py`'s clock-change rule. `sunAt(t)` is the one place
+a slot becomes a frame; it does not unpack shade, `frameAt(t)` does — the
+daylight band needs only the sun's height, and loading through it unpacked two
+dates at boot. Choosing a month or the 1st/15th still shows that sampled date
+exactly.
+
+**Location, now and saved places are the installed app's, and each is
+cautious in a specific way.** The dot is ink and panel like every other mark,
+with a halo the size of the fix's accuracy. It starts by itself only where
+permission is *already* granted — never a prompt at launch — and a fix far off
+the map stops the GPS silently at launch and explains itself only when the
+button asked. The clock follows real time (every 30 s, and on return to the
+front) until the hour is moved by hand; moving the hour keeps today's date,
+choosing a date leaves it, and **Back to now** restores both. Saved places are
+stored as positions, not node numbers — every rebuild renumbers the nodes and a
+saved hotel would quietly move — and matched back within 25 m.
+
+**Churches are shown only where their hours can be read.** A church is the
+coolest room in Rome when it is open, and only then. Of the 314 named churches
+in the bbox, 63 carry `opening_hours` in OpenStreetMap — but they are the ones
+visitors look for: the Pantheon, Minerva, San Luigi, Sant'Agnese, Santa Maria in
+Trastevere, Sant'Andrea della Valle, the Gesù. A church with readable hours is
+within 300 m of 45 % of street segments, within 500 m of 64 %. `hours.py`
+parses a deliberate subset at build time — month ranges, weekday lists, times,
+`off`, later rules overriding earlier ones — and *refuses* the rest (`Su[-1]`
+clock-change rules, a bare `closed`, comma-joined rules), so those churches are
+left off rather than guessed: 59 ship. Public holidays are dropped from day
+lists because the page cannot know them. The page evaluates each schedule for
+the day and hour on the clock, so scrubbing to 16:00 shows what will be open
+then. Only 10 of the 63 carry a check date, which is why the tap says "worth
+checking at the door" rather than sounding sure. Marks are ink squares (filled
+open, hollow closed) at the nasoni's zoom, drawn *over* the place labels — a
+church's own name sits on top of it, and the mark is what you tap. The parser
+has its own checks in `tests/validate.py`; `python3 hours.py` lists what it
+refused.
+
 **"Route via one" is scored on the dry stretch, not on the detour.** The
 obvious rule — the fountain that adds least — chose one the walk already passed
 97 % of the time: median detour 0 m, and every dry walk exactly as dry. The
@@ -343,19 +395,21 @@ is smooth.
 is 29 MB of the 31 MB unpacked, and the page only ever reads one date of it, so
 each of the 24 dates (`head.ndate`, `head.slots` = 32 frames each) is its own
 gzip stream and boot inflates only the one it opens on. `D.shade` keeps its full
-`[segment][frame]` shape and `dateBase()` — which every shade read goes through —
-fills a date the first time it is asked for. Measured with `measure_boot.mjs`:
+`[segment][frame]` shape and `frameAt()` — which every shade read goes through,
+since today can be answered from any date — fills a date the first time it is
+asked for. Measured with `measure_boot.mjs`:
 boot 2.04 s → 0.91 s with the CPU slowed 4×, 0.49 s → 0.28 s on desktop. A date
 then costs 155 ms / 56 ms the first time you switch to it. The price is size:
 24 separate streams lose some of the segment-major compression, 2.76 → 3.56 MB
 of gzip, and the file grew 5.4 → 6.4 MB. Twelve monthly streams would have cost
 +20 % instead of +29 %, but they unpack twice as much at boot. Anything that
-reads `D.shade` without going through `dateBase()` must call
+reads `D.shade` without going through `frameAt()` must call
 `window.ombra.loadDate(d)` first — the smoke test does, and checks every date
 lands in its own frames against `head.city`.
 
 `window.ombra` exposes state and helpers (`st`, `head`, `data`, `setEnd`,
-`recompute`, `nearestNode`, `labelForNode`, `screenXY`, `loadDate`, `BOOT`) for debugging and for the
+`recompute`, `nearestNode`, `labelForNode`, `screenXY`, `loadDate`, `BOOT`, `sunAt`,
+`solarPos`, `me`) for debugging and for the
 tests.
 
 Nasoni ride along in two `u2` sections, `nax`/`nay`, quantised like everything
@@ -446,11 +500,9 @@ patchy — some leafy streets score drier than they feel.
 
 ## Possible next steps
 
-- **Cool refuges.** Churches and shaded squares, as places to stop rather than
-  walk through. Deliberately left out of the nasoni change: a church is only a
-  refuge when it is open, and nothing in the pipeline knows opening hours, so the
-  map would be promising something it cannot check. Needs `opening_hours` parsing
-  before it is honest.
+- ~~**Cool refuges.**~~ Done for churches, as far as the data honestly goes —
+  see "Churches are shown only where their hours can be read" above. Parks are
+  not worth it: 3 of 47 carry hours.
 - ~~**The 3,535 heights still guessed, via footprint overlap.**~~ Tried and
   measured: it does not pay. See below — `measure_overlap.py` is the receipt.
   If you want those buildings measured rather than estimated, the cadastre is

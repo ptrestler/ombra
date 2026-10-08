@@ -154,6 +154,16 @@ button{cursor:pointer}
    while you are deciding where to walk. */
 #zoomctl .zfit svg{width:15px;height:15px;fill:none;stroke:currentColor;
   stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+/* Where you are. Off: an outline. Following you: filled, the same pressed look
+   as every other toggle here. Fixing: a slow pulse, because a first fix can
+   take seconds outdoors and a button that does nothing for that long reads as
+   broken. Hidden wherever the page cannot have a location at all. */
+#btnLoc svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;
+  stroke-linecap:round}
+#btnLoc[aria-pressed="true"] svg circle.c{fill:currentColor}
+#btnLoc.busy{animation:locpulse 1.2s ease-in-out infinite}
+@keyframes locpulse{50%{opacity:.45}}
+#btnLoc[hidden]{display:none}
 
 /* ---------- stale-build prompt ---------- */
 /* GitHub Pages serves index.html with max-age=600 and offers no way to change
@@ -169,6 +179,17 @@ button{cursor:pointer}
   background:var(--panel);color:var(--ink);box-shadow:var(--shadow);
   font-size:12.5px;font-weight:500;white-space:nowrap}
 #fresh[hidden]{display:none}
+/* Two small things that float over the map: a one-line note (a location that
+   is off the map, a refused permission), and the way back to the present once
+   the clock has been moved. Both top-left under the masthead, out of the
+   route card's way on a phone. */
+#toast,#btnNow{position:absolute;z-index:8;left:12px;top:calc(76px + env(safe-area-inset-top,0px));
+  border:1px solid var(--line);background:var(--panel);color:var(--ink);box-shadow:var(--shadow);
+  font-size:12px;line-height:1.4}
+#toast{right:64px;max-width:340px;padding:8px 12px;border-radius:10px}
+#btnNow{padding:7px 12px;border-radius:999px;font-weight:600}
+#toast[hidden],#btnNow[hidden]{display:none}
+#toast:not([hidden])~#btnNow{top:calc(124px + env(safe-area-inset-top,0px))}
 
 /* ---------- legend ---------- */
 #legend{position:absolute;z-index:5;left:12px;bottom:12px;pointer-events:none;
@@ -188,6 +209,16 @@ button{cursor:pointer}
 #legend.naso .nasorow{display:flex}
 #legend .nasorow i{flex:0 0 auto;width:7px;height:7px;border-radius:50%;
   background:var(--panel);border:1.4px solid var(--ink)}
+/* Churches share the row's rules: there only while they are being drawn. The
+   key is the two marks themselves - filled is open at the time on the clock,
+   hollow and faint is closed - because that is the only thing they say. */
+#legend .chrow{display:none;align-items:center;gap:6px;margin-top:5px;font-size:10px;
+  color:var(--ink-2);font-weight:500}
+#legend.church .chrow{display:flex}
+#legend.church:not(.naso) .chrow{margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}
+#legend .chrow i{flex:0 0 auto;width:8px;height:8px;border-radius:2px;border:1.4px solid var(--ink)}
+#legend .chrow i.o{background:var(--ink)}
+#legend .chrow i.c{background:var(--panel);opacity:.55;margin-left:4px}
 
 /* ---------- console ---------- */
 /* On a phone the console was 49% of the screen - the month grid alone is 101px -
@@ -335,6 +366,13 @@ tr.row:hover td{background:var(--panel-2)}
   font-size:13px;font-weight:500;color:var(--ink);
   -webkit-appearance:none;appearance:none}
 .rpt input::placeholder{color:var(--muted);font-weight:400}
+/* Save the place in this field. Ink, not a colour: an outline star until it is
+   saved, a filled one after. The button is bigger than its glyph so a thumb
+   can find it inside the field. */
+.star{flex:0 0 auto;border:none;background:transparent;color:var(--muted);font-size:17px;
+  line-height:1;padding:2px 4px;margin:-4px -4px -4px 0}
+.star[aria-pressed="true"]{color:var(--ink)}
+.star[hidden]{display:none}
 /* the row draws the focus ring, so the field inside does not draw a second one */
 .rpt input:focus{outline:none}
 .rpt:focus-within{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
@@ -481,7 +519,12 @@ tr.row:hover td{background:var(--panel-2)}
       <button class="iconbtn" id="btnZin"  title="Zoom in (+)"   aria-label="Zoom in">&#43;</button>
       <button class="iconbtn" id="btnZout" title="Zoom out (−)" aria-label="Zoom out">&#8722;</button>
       <button class="iconbtn zfit" id="btnZfit" title="Whole city (0)" aria-label="Show the whole city"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/></svg></button>
+      <button class="iconbtn" id="btnLoc" title="Where am I?" aria-label="Show where I am"
+              aria-pressed="false" hidden><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="5.2"/><circle class="c" cx="9" cy="9" r="2"/><path d="M9 1v2.4M9 14.6V17M1 9h2.4M14.6 9H17"/></svg></button>
     </div>
+
+    <div id="toast" role="status" hidden></div>
+    <button id="btnNow" hidden>&#8634; Back to now</button>
 
     <button id="fresh" hidden>A newer version is ready &#183; <b>Reload</b></button>
 
@@ -490,6 +533,7 @@ tr.row:hover td{background:var(--panel-2)}
       <div class="bar"></div>
       <div class="ends"><span>Full sun</span><span>50%</span><span>Full shade</span></div>
       <div class="nasorow"><i></i>Nasone &#8212; drinkable, all year</div>
+      <div class="chrow"><i class="o"></i>Church, open <i class="c"></i>closed</div>
     </div>
 
     <div id="card">
@@ -511,11 +555,13 @@ tr.row:hover td{background:var(--panel-2)}
         <div class="rpt" id="rFrom"><i class="pin" aria-hidden="true">A</i>
           <input id="rFromI" type="search" placeholder="Where are you now?" aria-label="Start of the walk"
                  autocomplete="off" role="combobox" aria-expanded="false" aria-controls="rResults"
-                 aria-autocomplete="list"></div>
+                 aria-autocomplete="list">
+          <button class="star" data-w="a" aria-pressed="false" aria-label="Save this place" hidden>&#9734;</button></div>
         <div class="rpt" id="rTo"><i class="pin b" aria-hidden="true">B</i>
           <input id="rToI" type="search" placeholder="Where are you going?" aria-label="Destination"
                  autocomplete="off" role="combobox" aria-expanded="false" aria-controls="rResults"
-                 aria-autocomplete="list"></div>
+                 aria-autocomplete="list">
+          <button class="star" data-w="b" aria-pressed="false" aria-label="Save this place" hidden>&#9734;</button></div>
         <button class="swap" id="rSwap" title="Swap" aria-label="Swap start and destination">&#8645;</button>
       </div>
 
@@ -584,6 +630,7 @@ tr.row:hover td{background:var(--panel-2)}
     <div class="months" id="months"><div class="dayseg" id="dayseg">
       <button class="dy" data-d="1"  aria-pressed="false">1st</button>
       <button class="dy" data-d="15" aria-pressed="true">15th</button>
+      <button class="dy" id="dyToday" aria-pressed="false">Today</button>
     </div></div>
 
     <div class="actions">
@@ -821,8 +868,8 @@ function nowFrame(){
     if(dom < 8) day = 1;
     else if(dom < 23) day = 15;
     else { day = 1; mo = (mo + 1) % 12; }
-    return {mo, day, ti};
-  }catch(e){ return {mo:7, day:15, ti:16}; }
+    return {mo, day, ti, today:{mo:n.getMonth(), d:dom}};
+  }catch(e){ return {mo:7, day:15, ti:16, today:null}; }
 }
 /* Distances are metric in the model and always will be - the panel describing
    40-metre segments and a 2-metre height grid stays as it is. This only changes
@@ -874,14 +921,15 @@ const AWAY = (()=>{ try{
   return Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Rome"
     ? "" : " · Rome";
 }catch(e){ return " · Rome"; } })();
-const st = {mo:NOW.mo, day:NOW.day, ti:NOW.ti, scale:1, cx:0, cy:0, sel:-1, hi:null,
+const st = {mo:NOW.mo, day:NOW.day, ti:NOW.ti, live:true, today:NOW.today, scale:1, cx:0, cy:0, sel:-1, hi:null,
             routing:false, a:-1, b:-1, k:1.2, route:null, refRoute:null,
             aL:"", bL:"", pick:null, mapPick:null, via:false};
 const dateIdx = () => st.mo*2 + (st.day===15?1:0);
 /* Every read of the shade goes through here for its date, so this is where a
    date that has not been unpacked yet gets unpacked. */
 const dateBase = () => { const d = dateIdx(); loadDate(d); return d*32; };
-const dayLabel = () => (st.day===1?"1":"15");
+const dayLabel = () => st.today ? String(st.today.d) : (st.day===1?"1":"15");
+const shownMo = () => st.today ? st.today.mo : st.mo;
 
 /* ---------- canvases ---------- */
 const stage=$("#stage"), cvBase=$("#base"), cvLine=$("#lines"), cvOver=$("#over");
@@ -1004,6 +1052,66 @@ function drawNasoni(ctx){
   }
 }
 
+/* ---------- churches: cool, and open or not ---------- */
+/* A church is the coolest room in Rome, but only when it is open, so only the
+   ones whose hours the build could read are here (59 of the 314 in the bbox):
+   no hours, no mark. Open or closed is worked out for the day and the time on
+   the clock, so moving the scrubber to 16:00 shows what will be open when you
+   get there. Hours are OpenStreetMap's and only some carry a check date, which
+   is why a tap says so instead of sounding sure. Ink and panel, a square to
+   tell them from the nasoni's circles, at the nasoni's zoom. */
+function shownDay(){
+  const y = new Date().getFullYear();
+  const mo = st.today ? st.today.mo : st.mo, d = st.today ? st.today.d : st.day;
+  const wd = (new Date(y, mo, d).getDay() + 6) % 7;          // Monday = 0
+  return {mo, wd};
+}
+function churchHours(rules, mo, wd){
+  let iv = null;                      // a later rule replaces an earlier one
+  for(const [mm, dd, v] of rules) if((mm >> mo) & 1 && (dd >> wd) & 1) iv = v;
+  return iv || [];
+}
+const hm = m => String(Math.floor(m/60) % 24).padStart(2,"0") + ":" + String(m%60).padStart(2,"0");
+function churchStatus(i, at){
+  const c = H.ch[i], {mo, wd} = shownDay(), t = at === undefined ? 360 + st.ti*30 : at;
+  const iv = churchHours(c[3], mo, wd);
+  for(let k=0;k<iv.length;k+=2) if(t >= iv[k] && t < iv[k+1]) return {open:true, until:iv[k+1]};
+  for(let k=0;k<iv.length;k+=2) if(iv[k] > t) return {open:false, from:iv[k]};
+  return {open:false, from:null};
+}
+const chX = i => H.ox + H.ch[i][1]*H.qs, chY = i => H.oy + H.ch[i][2]*H.qs;
+function drawChurches(ctx){
+  $("#legend").classList.toggle("church", !!H.ch && st.scale >= NASO_ZOOM);
+  if(!H.ch || st.scale < NASO_ZOOM) return;
+  const s = Math.max(3.2, Math.min(4.6, st.scale*4.6));
+  for(let i=0;i<H.ch.length;i++){
+    const x = sx(chX(i)), y = sy(chY(i));
+    if(x < -10 || x > W+10 || y < -10 || y > Hh+10) continue;
+    const open = churchStatus(i).open;
+    ctx.globalAlpha = open ? 1 : 0.55;
+    ctx.beginPath(); ctx.rect(x-s, y-s, 2*s, 2*s);
+    ctx.fillStyle = open ? C.ink : C.panel; ctx.fill();
+    ctx.lineWidth = 1.4; ctx.strokeStyle = C.ink; ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+function pickChurch(px, py){
+  if(!H.ch || st.scale < NASO_ZOOM) return -1;
+  let best = -1, bd = 16*16;
+  for(let i=0;i<H.ch.length;i++){
+    const dx = sx(chX(i)) - px, dy = sy(chY(i)) - py, d = dx*dx + dy*dy;
+    if(d < bd){ bd = d; best = i; }
+  }
+  return best;
+}
+function tellChurch(i){
+  const s = churchStatus(i), at = fmtTime(st.ti);
+  const when = s.open ? "open at " + at + ", until " + hm(s.until)
+             : s.from !== null ? "closed at " + at + ", opens " + hm(s.from)
+             : "closed for the rest of the day";
+  toast(H.ch[i][0] + " \u2014 " + when + ". Hours from OpenStreetMap; worth checking at the door.", 7000);
+}
+
 /* Which fountains are on a route, and the longest stretch of it without one.
    The count on its own cannot tell you what you want to know: four fountains
    clustered round the Pantheon end is not the same walk as four spread along
@@ -1070,7 +1178,91 @@ function prepSegs(){
   const cnt=D.scnt; SEGOFF=new Int32Array(cnt.length); SEGN=cnt;
   let p=0; for(let i=0;i<cnt.length;i++){SEGOFF[i]=p;p+=cnt[i];}
 }
-function frameIndex(){ return dateBase() + st.ti; }
+/* ---------- the sun, on any day ---------- */
+/* The model is sampled on the 1st and 15th. Every other day of the year, the
+   page used to show the nearest of those at the same clock time - and shade is
+   a matter of where the sun is, not of the date, so that was a stand-in and
+   not always a good one. measure_dates.py computed the real shade for the 8th
+   and 23rd of every month and scored the ways of standing in for it: the
+   nearest date was off by 3.03 pp on average (4.37 % of street-frames by more
+   than 20), and by 12.9 pp around the clock changes, where 23 October at
+   14:00 was answered with 1 November at 14:00 - an hour of sun away. Blending
+   the two dates either side: 2.29 pp. Taking the frame, from any date, whose
+   sun is closest in the sky: 1.63 pp (2.37 %), and 2.47 pp across the clock
+   changes. Blending the two closest suns did no better (1.67). So today is
+   answered with the closest sun, worked out here with shade.py's own NOAA
+   formula and observer. */
+const SUN_LAT = 41.8965, SUN_LON = 12.4800;
+const RAD = Math.PI/180;
+function lastSunday(y, m){           // m 1..12
+  const d = new Date(Date.UTC(y, m, 0));
+  return d.getUTCDate() - d.getUTCDay();
+}
+function romeTZ(y, m, d){            // CEST from the last Sunday of March to that of October
+  const k = m*100 + d;
+  return (k >= 300 + lastSunday(y, 3) && k < 1000 + lastSunday(y, 10)) ? 2 : 1;
+}
+function solarPos(y, m, d, h, mi, lat, lon, tz){       // solar.py, line for line
+  const jd0 = Date.UTC(y, m-1, d)/86400000 + 2440587.5;
+  const jd = jd0 + (h + mi/60 - tz)/24, jc = (jd - 2451545)/36525;
+  const gmls = (280.46646 + jc*(36000.76983 + jc*0.0003032)) % 360;
+  const gmas = 357.52911 + jc*(35999.05029 - 0.0001537*jc);
+  const ecc = 0.016708634 - jc*(0.000042037 + 0.0000001267*jc);
+  const r = gmas*RAD;
+  const seq = Math.sin(r)*(1.914602 - jc*(0.004817 + 0.000014*jc)) +
+              Math.sin(2*r)*(0.019993 - 0.000101*jc) + Math.sin(3*r)*0.000289;
+  const sal = gmls + seq - 0.00569 - 0.00478*Math.sin((125.04 - 1934.136*jc)*RAD);
+  const seo = 23 + (26 + ((21.448 - jc*(46.815 + jc*(0.00059 - jc*0.001813))))/60)/60;
+  const oc = seo + 0.00256*Math.cos((125.04 - 1934.136*jc)*RAD);
+  const decl = Math.asin(Math.sin(oc*RAD)*Math.sin(sal*RAD))/RAD;
+  const yy = Math.tan(oc/2*RAD)**2, gr = gmls*RAD, gar = gmas*RAD;
+  const eqt = 4*(yy*Math.sin(2*gr) - 2*ecc*Math.sin(gar) + 4*ecc*yy*Math.sin(gar)*Math.cos(2*gr)
+                 - 0.5*yy*yy*Math.sin(4*gr) - 1.25*ecc*ecc*Math.sin(2*gar))/RAD;
+  const tst = (((h*60 + mi + eqt + 4*lon - 60*tz) % 1440) + 1440) % 1440;
+  const ha = tst/4 - 180;
+  const latr = lat*RAD, dr = decl*RAD, har = ha*RAD;
+  const cz = Math.max(-1, Math.min(1, Math.sin(latr)*Math.sin(dr) + Math.cos(latr)*Math.cos(dr)*Math.cos(har)));
+  const zen = Math.acos(cz)/RAD;
+  const ca = Math.max(-1, Math.min(1, (Math.sin(latr)*cz - Math.sin(dr))/(Math.cos(latr)*Math.sin(zen*RAD))));
+  let az = Math.acos(ca)/RAD;
+  az = ha > 0 ? (az + 180) % 360 : (540 - az) % 360;
+  return [90 - zen, az];
+}
+let FSUN = null;                     // the unit vector of every frame's sun
+const SUNCACHE = new Map();
+function sunAt(t){
+  /* {fi, el, az}: the frame that stands for slot t on the shown day, and where
+     the sun really is then. A sampled date is its own answer. */
+  if(!st.today){
+    const fi = dateBase() + t, m = H.frames[fi];
+    return {fi, el:m.el, az:m.az};
+  }
+  const key = st.today.mo + "|" + st.today.d + "|" + t;
+  let hit = SUNCACHE.get(key);
+  if(!hit){
+    const y = new Date().getFullYear(), m = st.today.mo + 1, d = st.today.d;
+    const [el, az] = solarPos(y, m, d, 6 + Math.floor(t/2), t%2 ? 30 : 0, SUN_LAT, SUN_LON, romeTZ(y, m, d));
+    let fi;
+    if(el <= 3) fi = (st.mo*2 + (st.day === 15 ? 1 : 0))*32 + t;   // night is night on any date
+    else{
+      if(!FSUN) FSUN = H.frames.map(f => f.el > 3
+        ? [Math.cos(f.el*RAD)*Math.sin(f.az*RAD), Math.cos(f.el*RAD)*Math.cos(f.az*RAD), Math.sin(f.el*RAD)] : null);
+      const u = [Math.cos(el*RAD)*Math.sin(az*RAD), Math.cos(el*RAD)*Math.cos(az*RAD), Math.sin(el*RAD)];
+      let best = -2; fi = 0;
+      for(let i=0;i<FSUN.length;i++){
+        const v = FSUN[i]; if(!v) continue;
+        const c = v[0]*u[0] + v[1]*u[1] + v[2]*u[2];
+        if(c > best){ best = c; fi = i; }
+      }
+    }
+    hit = {fi, el, az}; SUNCACHE.set(key, hit);
+  }
+  return hit;
+}
+// only reading a frame's shade unpacks its date: the daylight band needs the
+// sun's height, not the streets, and would otherwise unpack two dates at boot
+const frameAt = t => { const fi = sunAt(t).fi; loadDate(Math.floor(fi / 32)); return fi; };
+function frameIndex(){ return frameAt(st.ti); }
 function shadeOf(seg, fi){ return D.shade[seg*H.nframe + fi]; }
 
 function drawLines(){
@@ -1162,6 +1354,10 @@ function drawOver(){
   }
   drawNasoni(ctx);
   drawLabels(ctx);
+  // over the labels: a church's own name is usually right on top of it, and
+  // the mark is the thing to tap
+  drawChurches(ctx);
+  drawMe(ctx);
   if(st.hi && st.hi.length){
     const wIn = Math.max(4.5, Math.min(14, st.scale*7));
     draw(st.hi, C.ink, wIn+5);
@@ -1213,16 +1409,18 @@ function loadDate(d){
 let cityAvg = null;
 
 function updateReadouts(){
-  const fi = frameIndex(), m = H.frames[fi];
+  const m = sunAt(st.ti), fi = m.fi;
   $("#clkT").textContent = fmtTime(st.ti);
-  $("#clkD").textContent = dayLabel() + " " + MONTH[st.mo] + AWAY;
+  $("#clkD").textContent = dayLabel() + " " + MONTH[shownMo()] + AWAY;
   const up = m.el > 0;
   $("#sunEl").textContent = up ? Math.round(m.el)+"\u00b0" : "down";
   $("#sunAz").textContent = up ? COMPASS(m.az) : "\u2014";
   $("#cityShade").textContent = up ? Math.round(cityAvg[fi])+"%" : "night";
   $("#time").value = st.ti;
-  document.querySelectorAll(".mo").forEach((b,i)=>b.setAttribute("aria-pressed", i===st.mo));
-  document.querySelectorAll(".dy").forEach(b=>b.setAttribute("aria-pressed", +b.dataset.d===st.day));
+  // today is neither the 1st nor the 15th, so neither of those is pressed
+  document.querySelectorAll(".mo").forEach((b,i)=>b.setAttribute("aria-pressed", i===shownMo()));
+  document.querySelectorAll(".dy[data-d]").forEach(b=>b.setAttribute("aria-pressed", !st.today && +b.dataset.d===st.day));
+  $("#dyToday").setAttribute("aria-pressed", st.today ? "true" : "false");
   paintDaylight();
   if(st.routing && st.a>=0 && st.b>=0){ recompute(); renderRoute(); }
   if(!sheetOpen || sheetTab!=="how") renderList();
@@ -1230,9 +1428,8 @@ function updateReadouts(){
 }
 
 function paintDaylight(){
-  const base = dateBase();
   let a=-1,b=-1;
-  for(let t=0;t<32;t++){ if(H.frames[base+t].el>0){ if(a<0)a=t; b=t; } }
+  for(let t=0;t<32;t++){ if(sunAt(t).el>0){ if(a<0)a=t; b=t; } }
   const el=$("#daylight");
   if(a<0){ el.style.display="none"; return; }
   el.style.display="block";
@@ -1272,15 +1469,15 @@ function renderList(){
   const asc = sheetTab==="sun";
   rows.sort((a,b)=> (asc ? a.v-b.v : b.v-a.v) || (b.n-a.n));
   const top = rows.slice(0,60);
-  const night = H.frames[fi].el<=0;
+  const night = sunAt(st.ti).el<=0;
   let html = "";
   if(night){
     html = '<p class="prose">The sun is below the horizon at '+fmtTime(st.ti)+' on '+
-           dayLabel()+' '+MONTHFULL[st.mo]+'. Everything is shade. Move the scrubber into daylight.</p>';
+           dayLabel()+' '+MONTHFULL[shownMo()]+'. Everything is shade. Move the scrubber into daylight.</p>';
   } else {
     html = '<p class="prose" style="margin:2px 0 12px">'+
       (asc ? 'Most exposed named streets at ' : 'Shadiest named streets at ')+
-      '<b>'+fmtTime(st.ti)+', '+dayLabel()+' '+MONTHFULL[st.mo]+'</b>, walking on the better side.</p>'+
+      '<b>'+fmtTime(st.ti)+', '+dayLabel()+' '+MONTHFULL[shownMo()]+'</b>, walking on the better side.</p>'+
       '<table><thead><tr><th>Street</th><th class="num">Shade</th></tr></thead><tbody>';
     for(const r of top){
       html += '<tr class="row" data-name="'+r.nm.replace(/"/g,"&quot;")+'"><td>'+
@@ -1328,9 +1525,11 @@ into shade well before the flat-earth version thought they would. Rays reach up 
 <li>Sun position comes from the NOAA solar-position algorithm for Rome's latitude, on the
 <b>1st and 15th of every month</b> \u2014 24 dates, each at half-hour steps. Times are Rome
 civil time, with summer time applied on the real EU dates (29 March to 25 October in 2026).</li>
-<li>Sampling twice a month keeps the sun within about 2\u00b0 of where it actually is on
-any given day. The gap matters most around the equinoxes, when the sun's height changes
-fastest, and least at the solstices.</li>
+<li>On every other day, the map works out where the sun really is and shows the stored
+moment with the sun closest to that \u2014 shade depends on where the sun is, not on the
+date. Checked against the real shade computed for the 8th and 23rd of every month, that
+is off by <b>1.6 points</b> on average; showing the nearest sampled date instead was off by
+3.0, and by 12.9 around the clock changes, when it answered with a sun an hour away.</li>
 </ul>
 
 <h3>Planning a walk</h3>
@@ -1371,6 +1570,12 @@ detour the same as a metre without water. On 300 random dry walks of 0.8\u20132.
 14:00 in July, that took the median dry stretch from 841&nbsp;m to 581&nbsp;m for a median
 17&nbsp;m more walking. Private, customers-only and disused taps are left out; nothing
 here knows whether a particular one is switched off today.</li>
+<li><b>__NCHOPEN__ churches</b> of the __NCHURCH__ on the map, the ones whose opening hours
+OpenStreetMap carries in a form the build can read: as refuges from the heat, they are only
+any use when open. Filled means open at the time on the clock, hollow closed. Seasonal
+hours tied to the clock change are not read, and those churches are left off rather than
+guessed. Hours change and few entries say when they were last checked, so treat them as
+a good guess, not a promise.</li>
 <li><b>Terrain</b> from the AWS Open Data terrain tiles (SRTM-derived, ~30&nbsp;m),
 sampled onto a 10&nbsp;m grid covering the map plus a 2&nbsp;km margin so hills outside
 the frame still cast into it.</li>
@@ -1446,6 +1651,8 @@ function openSheet(tab){
      .replace("__NKNOWN__", H.nknown ? H.nknown.toLocaleString("en") : "2,443")
      .replace("__NCAD__", H.ncad ? H.ncad.toLocaleString("en") : "8,180")
      .replace("__NNASO__", H.nnaso ? H.nnaso.toLocaleString("en") : "460")
+     .replace("__NCHOPEN__", H.ch ? String(H.ch.length) : "59")
+     .replace("__NCHURCH__", H.nchurch ? String(H.nchurch) : "314")
      .replace("__NIMP__", (H.nbld && H.nknown && H.ncad)
         ? (H.nbld - H.nknown - H.ncad).toLocaleString("en") : "3,535")
      // counted off the payload rather than typed in: the street total read
@@ -1488,7 +1695,7 @@ function renderCard(){
   const v = s/ids.length;
   $("#cName").textContent = nm;
   $("#cSub").textContent = (KINDLABEL[H.kinds[D.kind[ids[0]]]]||"") + " \u00b7 " +
-    fmtLen(ids.length*40) + " \u00b7 " + dayLabel() + " " + MONTH[st.mo];
+    fmtLen(ids.length*40) + " \u00b7 " + dayLabel() + " " + MONTH[shownMo()];
   $("#cPct").textContent = Math.round(v);
   $("#cPct").parentElement.style.color = rampInk(v);
   drawStrip("#strip", ids.map(i=>[i,1]), 62);
@@ -1499,13 +1706,14 @@ function drawStrip(sel, pairs, h){
   const w=Math.max(200,Math.round(r.width));
   cv.width=Math.round(w*DPR); cv.height=Math.round(h*DPR);
   const ctx=cv.getContext("2d"); ctx.setTransform(DPR,0,0,DPR,0,0); ctx.clearRect(0,0,w,h);
-  const base=dateBase(), pad=3;
+  const pad=3, fr=[], el=[];
+  for(let t=0;t<32;t++){ const m=sunAt(t); fr.push(frameAt(t)); el.push(m.el); }
   const vals=[]; let wt=0;
   for(const pr of pairs) wt+=pr[1];
   wt = wt||1;
   for(let t=0;t<32;t++){
     let acc=0;
-    for(const pr of pairs) acc += D.shade[pr[0]*H.nframe+base+t]*pr[1];
+    for(const pr of pairs) acc += D.shade[pr[0]*H.nframe+fr[t]]*pr[1];
     vals.push(acc/wt);
   }
   const X=t=>pad+t/31*(w-2*pad), Y=v=>h-8-(v/100)*(h-16);
@@ -1513,7 +1721,7 @@ function drawStrip(sel, pairs, h){
   ctx.fillStyle=C.line; ctx.globalAlpha=.55;
   let runStart=-1;
   for(let t=0;t<=32;t++){
-    const dark = t<32 && H.frames[base+t].el<=0;
+    const dark = t<32 && el[t]<=0;
     if(dark && runStart<0) runStart=t;
     if(!dark && runStart>=0){
       const a=X(runStart)-(w-2*pad)/62, b2=X(t-1)+(w-2*pad)/62;
@@ -1541,8 +1749,8 @@ function drawStrip(sel, pairs, h){
   ctx.beginPath(); ctx.arc(nx,ny,4.5,0,7); ctx.fillStyle=rampFor(vals[st.ti]);
   ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=C.panel; ctx.stroke();
   // worst moment of the day, direct-labelled
-  let lo=0; for(let t=0;t<32;t++) if(H.frames[base+t].el>3 && vals[t]<vals[lo]) lo=t;
-  if(H.frames[base+lo].el>3 && vals[lo] < 96){
+  let lo=0; for(let t=0;t<32;t++) if(el[t]>3 && vals[t]<vals[lo]) lo=t;
+  if(el[lo]>3 && vals[lo] < 96){
     const lx=X(lo), ly=Y(vals[lo]);
     ctx.beginPath(); ctx.arc(lx,ly,3,0,7); ctx.fillStyle=C.sun; ctx.fill();
     ctx.font="600 10px Archivo, sans-serif"; ctx.fillStyle=C.muted;
@@ -1568,7 +1776,7 @@ function bindStrip(sel, out, back){
   const cv=$(sel);
   const slotAt = e => { const r=cv.getBoundingClientRect();
     return Math.round(Math.max(0,Math.min(31,(e.clientX-r.left-3)/(r.width-6)*31))); };
-  const goTo = t => { st.ti=t; updateReadouts(); schedule(false); };
+  const goTo = t => { st.ti=t; leaveNow(); updateReadouts(); schedule(false); };
   cv.addEventListener("pointermove", e=>{
     const v=cv._vals; if(!v) return;
     const t=slotAt(e);
@@ -1781,10 +1989,55 @@ function streetXY(name){
     for(let k=0;k<SEGN[si];k++){ x+=D.sX[off+k]; y+=D.sY[off+k]; n++; } }
   return n ? [x/n,y/n] : null;
 }
-function entryXY(e){ return e.kind===0 ? placeXY(e.i) : streetXY(e.i); }
+function entryXY(e){ return e.kind===2 ? [e.x, e.y] : (e.kind===0 ? placeXY(e.i) : streetXY(e.i)); }
+
+/* ---------- saved places ---------- */
+/* Your hotel, the café you keep going back to: one tap as either end of a walk.
+   Kept on this device only. Stored as a position, not a node number - node
+   numbers are rebuilt with every map and would quietly point somewhere else
+   after an update - and matched back to a place within 25 m. Twenty at most:
+   past that the list stops being a shortcut. */
+const SAVE_KEY = "ombra.saved";
+let SAVED = (() => { try{
+  const v = JSON.parse(localStorage.getItem(SAVE_KEY) || "[]");
+  return Array.isArray(v) ? v.filter(p => p && typeof p.n === "string" &&
+                                         isFinite(p.x) && isFinite(p.y)).slice(0, 20) : [];
+}catch(e){ return []; } })();
+function storeSaved(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(SAVED)); }catch(e){} }
+const savedAt = (x, y) => SAVED.findIndex(p => Math.hypot(p.x - x, p.y - y) < 25);
+const savedRows = n => SAVED.filter(p => !n || norm(p.n).includes(n))
+                            .map(p => ({n:p.n, c:"Saved", kind:2, x:p.x, y:p.y, hi:0}));
+function syncStars(){
+  for(const w of ["a", "b"]){
+    const node = w === "a" ? st.a : st.b, b = document.querySelector('.star[data-w="'+w+'"]');
+    b.hidden = node < 0;
+    const on = node >= 0 && savedAt(NODEX[node], NODEY[node]) >= 0;
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    b.innerHTML = on ? "&#9733;" : "&#9734;";
+    b.setAttribute("aria-label", on ? "Remove from saved places" : "Save this place");
+  }
+}
+document.querySelectorAll(".star").forEach(b => b.addEventListener("click", e => {
+  e.stopPropagation();                 // the row would otherwise open the picker
+  const w = b.dataset.w, node = w === "a" ? st.a : st.b;
+  if(node < 0) return;
+  const i = savedAt(NODEX[node], NODEY[node]);
+  if(i >= 0){ SAVED.splice(i, 1); toast("Removed from your saved places.", 2500); }
+  else{
+    const lab = (w === "a" ? st.aL : st.bL).replace(/^My location \u00b7 /, "");
+    const name = prompt("Save this place as", lab);
+    if(name === null) return;
+    SAVED.unshift({n:(name.trim() || lab).slice(0, 60), x:Math.round(NODEX[node]), y:Math.round(NODEY[node])});
+    SAVED = SAVED.slice(0, 20);
+    toast("Saved. It's at the top of the list whenever you pick a place.", 3000);
+  }
+  storeSaved(); syncStars();
+  if(st.pick) renderResults(fieldOf(st.pick).value.trim());
+}));
+
 function searchDest(q){
   const n=norm(q);
-  if(!n) return H.top.map(t=>({n:t[0], c:"", i:t[2], kind:t[1], hi:0}));
+  if(!n) return savedRows("").concat(H.top.map(t=>({n:t[0], c:"", i:t[2], kind:t[1], hi:0})));
   const out=[];
   for(const src of [PLN,STN])
     for(const e of src){
@@ -1795,7 +2048,7 @@ function searchDest(q){
     }
   out.sort((a,b)=> (b.s>=100?1:0)-(a.s>=100?1:0) || (a.hi===0?0:1)-(b.hi===0?0:1) ||
                    a.hi-b.hi || (b.s-a.s) || a.n.length-b.n.length || a.n.localeCompare(b.n));
-  return out.slice(0,40);
+  return savedRows(n).concat(out).slice(0,40);
 }
 function labelForNode(n){
   for(let p=HEADi[n];p<HEADi[n+1];p++){
@@ -1839,6 +2092,9 @@ function closeRoute(){
   $("#btnRoute").setAttribute("aria-pressed","false");
   $("#rcard").classList.remove("open"); setPicking(false);
   st.a=-1; st.b=-1; st.aL=""; st.bL=""; st.pick=null; st.mapPick=null; st.via=false;
+  // and the text in the fields: reopening searched for whatever was left there,
+  // so the shortlist came back as "Nothing matched"
+  fieldOf("a").value = ""; fieldOf("b").value = "";
   st.route=null; st.refRoute=null; resize(); schedule(false);
 }
 function renderRoute(){
@@ -1849,6 +2105,7 @@ function renderRoute(){
   // while a route is up, and that would eat a half-finished name
   setField("#rFromI", st.aL);
   setField("#rToI", st.bL);
+  syncStars();
   if(st.pick) return;
   setPicking(false);
   $("#rFromI").setAttribute("aria-expanded","false");
@@ -1866,7 +2123,7 @@ function renderRoute(){
     $("#rSub").textContent="Those two points aren't joined in the street network.";
     $("#rPct").textContent="\u2014"; $("#rCompare").innerHTML=""; return; }
   $("#rTitle").textContent = fmtLen(r.len)+" \u00b7 "+fmtMin(r.len);
-  $("#rSub").textContent = "at "+fmtTime(st.ti)+", "+dayLabel()+" "+MONTH[st.mo]+
+  $("#rSub").textContent = "at "+fmtTime(st.ti)+", "+dayLabel()+" "+MONTH[shownMo()]+
     " \u00b7 "+fmtLen(r.len*(1-r.shade/100))+" in the sun";
   $("#rPct").textContent = Math.round(r.shade);
   $("#rBig").style.color = rampInk(r.shade);
@@ -2073,6 +2330,11 @@ function applyGeoStatus(){
 }
 function useGeo(){
   const btn=$("#pickGeo");
+  // the dot already knows: no need to wait for the GPS a second time
+  if(me.t && me.inside && Date.now() - me.t < 60000){
+    const n=nearestNode(me.x, me.y);
+    if(n>=0){ setEnd(st.pick, n, "My location \u00b7 "+labelForNode(n)); return; }
+  }
   btn.textContent="Locating\u2026"; btn.disabled=true;
   navigator.geolocation.getCurrentPosition(pos=>{
     btn.textContent="Use my location"; btn.disabled=false;
@@ -2105,6 +2367,134 @@ function useGeo(){
   }, {enableHighAccuracy:true, timeout:12000, maximumAge:60000});
 }
 
+/* ---------- a one-line note over the map ---------- */
+let toastT = 0;
+function toast(msg, ms){
+  const t = $("#toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, ms || 6000);
+}
+
+/* ---------- now ---------- */
+/* The clock follows the real one until you move it. An app left open on a
+   phone used to sit on whatever half-hour it was opened at, so the map you
+   glanced at after lunch was the morning's. While it is live it re-reads the
+   time every 30 s and whenever the app comes back to the front; moving the
+   hour or the date by hand leaves it where you put it, and "Back to now"
+   appears to return. */
+/* Moving the hour stops the clock but keeps today; choosing a month or the
+   1st/15th goes to that sampled date exactly. */
+function leaveNow(date){
+  if(st.live){ st.live = false; $("#btnNow").hidden = false; }
+  if(date && st.today){ st.today = null; $("#btnNow").hidden = false; }
+}
+function goNow(){
+  const n = nowFrame();
+  const t = n.today || {mo:-1, d:-1}, was = st.today || {mo:-2, d:-2};
+  const moved = n.mo !== st.mo || n.day !== st.day || n.ti !== st.ti || t.mo !== was.mo || t.d !== was.d;
+  st.live = true; $("#btnNow").hidden = true;
+  if(!moved) return;
+  st.mo = n.mo; st.day = n.day; st.ti = n.ti; st.today = n.today;
+  if(H) { updateReadouts(); schedule(false); }
+}
+setInterval(() => { if(st.live && !document.hidden) goNow(); }, 30000);
+document.addEventListener("visibilitychange", () => { if(!document.hidden && st.live) goNow(); });
+
+/* ---------- where you are ---------- */
+/* A dot for you, and a map that follows it. Drawn in ink and panel like the
+   pins and the nasoni: every hue on this map is a shade percentage, and a blue
+   "you" would read as a shaded street. The halo is the fix's own accuracy, so
+   a 60 m indoor fix looks like one. Dragging the map stops it following - you
+   are looking somewhere else - and the button brings it back; pressed while
+   following, it switches location off. */
+const me = {watch:null, x:0, y:0, acc:0, t:0, follow:false, inside:false, auto:false};
+const ME_ZOOM = 0.9;      // px per metre: streets and their names, and the nasoni
+function syncLocBtn(){
+  const b = $("#btnLoc");
+  b.setAttribute("aria-pressed", me.watch !== null && me.follow ? "true" : "false");
+  b.classList.toggle("busy", me.watch !== null && !me.t);
+  b.title = me.watch === null ? "Where am I?" : (me.follow ? "Stop showing where I am" : "Back to where I am");
+}
+function meXY(pos){
+  return [(pos.coords.longitude - H.proj.lon0)*H.proj.mperlon,
+          (pos.coords.latitude  - H.proj.lat0)*H.proj.mperlat];
+}
+function offMap(x, y){
+  const b = H.bbox;
+  const dx = Math.max(b.x0 - x, 0, x - b.x1), dy = Math.max(b.y0 - y, 0, y - b.y1);
+  return Math.hypot(dx, dy);
+}
+function centreOnMe(){
+  if(st.scale < ME_ZOOM*0.6) st.scale = ME_ZOOM;
+  st.cx = me.x; st.cy = me.y; syncZoomBtns(); schedule(true);
+}
+function startLocate(auto){
+  if(geoStatus() !== "ok") return;
+  me.follow = true; me.auto = !!auto;
+  if(me.watch === null){
+    me.watch = navigator.geolocation.watchPosition(onFix, onFixErr,
+      {enableHighAccuracy:true, maximumAge:15000, timeout:20000});
+  } else if(me.t && me.inside) centreOnMe();
+  syncLocBtn();
+}
+function stopLocate(){
+  if(me.watch !== null) navigator.geolocation.clearWatch(me.watch);
+  me.watch = null; me.t = 0; me.follow = false; me.inside = false;
+  syncLocBtn(); schedule(false);
+}
+function onFix(pos){
+  const first = !me.t;
+  [me.x, me.y] = meXY(pos); me.acc = pos.coords.accuracy || 0; me.t = Date.now();
+  const away = offMap(me.x, me.y);
+  me.inside = away < 300;
+  if(!me.inside){
+    // someone planning from home: say so once, and stop asking the GPS
+    if(!me.auto) toast("You're " + fmtLen(away) + " from the edge of this map, which covers the "+
+                       "historic centre. It will show you once you're in it.");
+    stopLocate(); me.auto = false; return;
+  }
+  me.auto = false;
+  if(me.follow) centreOnMe(); else schedule(false);
+  if(first) syncLocBtn();
+}
+function onFixErr(err){
+  const auto = me.auto; stopLocate(); me.auto = false;
+  if(auto) return;                       // nobody asked; nothing to apologise for
+  toast(err.code === 1
+    ? "Location is turned off for this page. Turn it on in your browser or phone settings."
+    : err.code === 2 ? "Your phone couldn't get a fix — common indoors. Try again outside."
+    : "Location timed out. Try again in a moment.");
+}
+function drawMe(ctx){
+  if(me.watch === null || !me.t || !me.inside) return;
+  const x = sx(me.x), y = sy(me.y);
+  if(x < -60 || x > W+60 || y < -60 || y > Hh+60) return;
+  const halo = me.acc * st.scale;
+  if(halo > 9){
+    ctx.beginPath(); ctx.arc(x, y, Math.min(halo, Math.max(W, Hh)), 0, 7);
+    ctx.globalAlpha = 0.10; ctx.fillStyle = C.ink; ctx.fill();
+    ctx.globalAlpha = 0.35; ctx.lineWidth = 1; ctx.strokeStyle = C.ink; ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  ctx.beginPath(); ctx.arc(x, y, 8.5, 0, 7); ctx.fillStyle = C.panel; ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, 6, 0, 7); ctx.fillStyle = C.ink; ctx.fill();
+}
+$("#btnLoc").addEventListener("click", () => {
+  if(me.watch !== null && me.follow) stopLocate();
+  else startLocate(false);
+});
+$("#btnNow").addEventListener("click", goNow);
+/* Here, at launch - but only where the answer is already yes. Asking for a
+   location the moment the page opens, before anyone has done anything, is the
+   prompt people learn to refuse; once granted, an app that opens on you is
+   what they installed it for. If you are not on the map, it says nothing. */
+function locateIfAllowed(){
+  const btn = $("#btnLoc");
+  btn.hidden = geoStatus() !== "ok";
+  if(btn.hidden || !navigator.permissions || !navigator.permissions.query) return;
+  navigator.permissions.query({name:"geolocation"})
+    .then(p => { if(p.state === "granted") startLocate(true); }).catch(()=>{});
+}
+
 /* ---------- picking ---------- */
 function pick(px,py){
   const wx=ux(px), wy=uy(py), R=Math.max(10, 16/st.scale);
@@ -2124,7 +2514,7 @@ function pick(px,py){
 
 /* ---------- interaction ---------- */
 let ptrs=new Map(), lastDist=0, moved=0, dragging=false;
-const UIHIT = '#top, #zoomctl, #card, #rcard, #sheet, #legend, #fresh';
+const UIHIT = '#top, #zoomctl, #card, #rcard, #sheet, #legend, #fresh, #toast, #btnNow';
 stage.addEventListener("pointerdown", e=>{
   if(e.target.closest && e.target.closest(UIHIT)) return;   // let the controls have the tap
   stage.setPointerCapture(e.pointerId);
@@ -2149,12 +2539,15 @@ stage.addEventListener("pointermove", e=>{
   } else {
     st.cx -= dx/st.scale; st.cy += dy/st.scale; clampView(); schedule(true);
   }
+  if(moved > 8 && me.follow){ me.follow = false; syncLocBtn(); }
 });
 function endPtr(e){
   if(ptrs.size===1 && moved<8 && dragging){
     const r=stage.getBoundingClientRect();
     if(st.routing){ setPoint(ux(e.clientX-r.left), uy(e.clientY-r.top)); }
     else {
+      const c=pickChurch(e.clientX-r.left, e.clientY-r.top);
+      if(c>=0){ tellChurch(c); ptrs.delete(e.pointerId); if(ptrs.size===0){ dragging=false; stage.classList.remove("drag"); } return; }
       const i=pick(e.clientX-r.left, e.clientY-r.top);
       if(i>=0) selectSeg(i); else { st.hi=null; st.sel=null; $("#card").classList.remove("open"); schedule(false); }
     }
@@ -2237,7 +2630,7 @@ function clampView(){
 }
 
 /* ---------- controls ---------- */
-$("#time").addEventListener("input", e=>{ st.ti=+e.target.value; updateReadouts(); schedule(false); });
+$("#time").addEventListener("input", e=>{ st.ti=+e.target.value; leaveNow(); updateReadouts(); schedule(false); });
 /* Collapsed by default on a phone, and remembered: someone who wants the map
    big wants it big every time. Storage throws in a private window, so every
    access is guarded and the default survives it. */
@@ -2577,7 +2970,7 @@ const BOOT = {};
     if(H.sections.nax){ D.naX=dq(view(buf,"nax"),ox); D.naY=dq(view(buf,"nay"),oy); }
     D.kind=view(buf,"kind"); D.name=view(buf,"name"); D.cov=view(buf,"cov");
     D.shade=new Uint8Array(H.nseg*H.nframe); SHB=lines.slice(1); cityAvg=H.city;
-    dateBase(); lap("date");
+    frameIndex(); lap("date");
     D.eSeg=view(buf,"eSeg"); D.eI0=view(buf,"eI0"); D.eI1=view(buf,"eI1");
     D.eU=view(buf,"eU"); D.eV=view(buf,"eV"); D.eLen=view(buf,"eLen");
     lap("unpack");
@@ -2586,19 +2979,28 @@ const BOOT = {};
 
     // months
     const mc=$("#months");
-    mc.querySelectorAll(".dy").forEach(b=>b.addEventListener("click",()=>{
-      st.day=+b.dataset.d; updateReadouts(); schedule(false); }));
+    mc.querySelectorAll(".dy[data-d]").forEach(b=>b.addEventListener("click",()=>{
+      st.day=+b.dataset.d; leaveNow(true); updateReadouts(); schedule(false); }));
+    // today's real date, at whatever hour is showing: the clock stays put
+    $("#dyToday").addEventListener("click", ()=>{
+      const n = nowFrame(); if(!n.today) return;
+      st.today = n.today; st.mo = n.mo; st.day = n.day; leaveNow();
+      updateReadouts(); schedule(false);
+    });
     MONTH.forEach((m,i)=>{ const b=document.createElement("button");
       b.className="mo"; b.textContent=m; b.setAttribute("aria-pressed", i===st.mo);
-      b.addEventListener("click",()=>{ st.mo=i; updateReadouts(); schedule(false); });
+      b.addEventListener("click",()=>{
+        // a month chosen from today keeps the sampled day nearest today
+        st.mo=i; leaveNow(true); updateReadouts(); schedule(false); });
       mc.appendChild(b); });
 
     resize();
     fitAll();
     updateReadouts(); drawAll(); renderList(); lap("draw");
+    locateIfAllowed();
     window.ombra = {st, BOOT, setPoint, setEnd, openPick, searchDest, entryXY, recompute, rampInk,
                     BUILD, checkFresh,
-                    renderRoute, frameIndex, nearestNode, labelForNode, nasoNodes, loadDate,
+                    renderRoute, frameIndex, churchStatus, sunAt, solarPos, romeTZ, nearestNode, labelForNode, nasoNodes, loadDate, me, goNow,
                     nodeXY:i=>[NODEX[i],NODEY[i]], comp:i=>COMP[i], bigc:()=>BIGC,
                     screenXY:i=>[sx(NODEX[i]),sy(NODEY[i])],   // where it is on screen now
                     get data(){return D}, get head(){return H}};

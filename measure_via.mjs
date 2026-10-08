@@ -22,7 +22,7 @@ await p.waitForFunction(() => document.querySelector('#loading').style.display =
                         { timeout: 60000 });
 const out = await p.evaluate(k => {
   const o = window.ombra, st = o.st, H = o.head;
-  st.mo = 6; st.day = 15; st.ti = 16; st.k = k; st.routing = true;
+  st.mo = 6; st.day = 15; st.ti = 16; st.live = false; st.k = k; st.routing = true;
   let seed = 7;
   const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
   const rows = []; let tv = 0;

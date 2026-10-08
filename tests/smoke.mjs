@@ -78,6 +78,39 @@ async function run(engine, label, breakStreams, which) {
     });
     check('every date unpacks into its own frames', rt.worst <= 0.006,
           `worst frame ${rt.at} of ${rt.n} off by ${rt.worst} pp`);
+    // Today is answered with the frame whose sun is closest in the sky, found
+    // with a port of solar.py. It must agree with the sun the build computed,
+    // to the 0.01 degrees the header rounds to, on every frame - and with
+    // shade.py's clock-change rule.
+    const sun = await p.evaluate(() => {
+      const o = window.ombra, H = o.head;
+      let del = 0, daz = 0, tz = 0;
+      for (const m of H.frames) {
+        const [el, az] = o.solarPos(2026, m.mo, m.d, m.h, m.mi, 41.8965, 12.48, m.tz);
+        del = Math.max(del, Math.abs(el - m.el));
+        daz = Math.max(daz, m.el > 0 ? Math.abs(((az - m.az + 540) % 360) - 180) : 0);
+        if (o.romeTZ(2026, m.mo, m.d) !== m.tz) tz++;
+      }
+      return { del: +del.toFixed(4), daz: +daz.toFixed(4), tz };
+    });
+    check('the page finds the sun where the build did', sun.del <= 0.011 && sun.daz <= 0.011 && sun.tz === 0,
+          `worst ${sun.del} deg up, ${sun.daz} deg round, ${sun.tz} clock-rule misses`);
+    // 23 October at 14:00: the nearest sampled date is 1 November, after the
+    // clocks go back - an hour of sun away. The closest-sun frame is not.
+    const oct = await p.evaluate(() => {
+      const o = window.ombra, st = o.st, H = o.head;
+      const keep = { live: st.live, today: st.today, mo: st.mo, day: st.day, ti: st.ti };
+      st.live = false; st.today = { mo: 9, d: 23 }; st.mo = 10; st.day = 1; st.ti = 16;
+      const s = o.sunAt(16), f = H.frames[s.fi], old = H.frames[(10 * 2) * 32 + 16];
+      const ang = (a, b) => { const u = x => [Math.cos(x.el*Math.PI/180)*Math.sin(x.az*Math.PI/180),
+        Math.cos(x.el*Math.PI/180)*Math.cos(x.az*Math.PI/180), Math.sin(x.el*Math.PI/180)];
+        const p = u(a), q = u(b); return Math.acos(Math.min(1, p[0]*q[0]+p[1]*q[1]+p[2]*q[2])) * 180 / Math.PI; };
+      const out = { now: +ang(s, f).toFixed(2), was: +ang(s, old).toFixed(2), from: f.mo + '/' + f.d + ' ' + f.h + ':' + f.mi };
+      Object.assign(st, keep);
+      return out;
+    });
+    check('a day between samples gets a frame with the sun where it really is', oct.now < 2 && oct.was > 10,
+          `23 Oct 14:00 -> ${oct.from}, ${oct.now} deg off; nearest date was ${oct.was} deg off`);
     check('Piazza Trilussa shaded at 18:00', d.trilussa > 85, `${d.trilussa}%`);
     // street lookup and routing
     await p.fill('#search', 'Via Giulia'); await p.press('#search', 'Enter');
@@ -380,6 +413,31 @@ async function run(engine, label, breakStreams, which) {
           naso.gap >= 400 ? /dry stretch/.test(naso.line) : naso.line === '',
           naso.line || '(silent, as it should be)');
     check('the legend explains them while they are on the map', naso.legend);
+    // Churches: only those whose hours were readable, open or not for the day
+    // and hour on the clock. The Pantheon's are Mo-Sa 08:30-19:15; Su 09:00-17:45.
+    const ch = await p.evaluate(() => {
+      const o = window.ombra, H = o.head, st = o.st;
+      const i = H.ch.findIndex(c => /^Pantheon$/.test(c[0]) || /Santa Maria ad Martyres/.test(c[0]));
+      const keep = { today: st.today, live: st.live };
+      // a Sunday and a Tuesday in October of whatever year the clock says
+      const y = new Date().getFullYear();
+      let sunD = 1; while (new Date(y, 9, sunD).getDay() !== 0) sunD++;
+      st.live = false;
+      st.today = { mo: 9, d: sunD };
+      const sun18 = o.churchStatus(i, 18 * 60), sun10 = o.churchStatus(i, 10 * 60);
+      st.today = { mo: 9, d: sunD + 2 };
+      const tue18 = o.churchStatus(i, 18 * 60), tue20 = o.churchStatus(i, 20 * 60);
+      Object.assign(st, keep);
+      return { n: H.ch.length, all: H.nchurch, name: i >= 0 ? H.ch[i][0] : null,
+               sun18, sun10, tue18, tue20 };
+    });
+    check('only churches with readable hours ride along', ch.n > 40 && ch.n < ch.all,
+          `${ch.n} of ${ch.all}`);
+    check('and each is open or closed for the day and hour on the clock',
+            ch.name && !ch.sun18.open && ch.sun10.open && ch.sun10.until === 17 * 60 + 45 &&
+            ch.tue18.open && ch.tue18.until === 19 * 60 + 15 && !ch.tue20.open && ch.tue20.from === null,
+            `${ch.name}: Sun 18:00 ${ch.sun18.open ? 'open' : 'closed'}, Tue 18:00 open until ${ch.tue18.until / 60 | 0}:${String(ch.tue18.until % 60).padStart(2, '0')}`);
+
 
     // Via a nasone: a dry walk offers the stop, and taking it bends the walk
     // through a fountain without breaking it into pieces
@@ -608,6 +666,149 @@ async function installable(){
   srv.close();
 }
 
+// Where you are, and now. Chromium, a phone, a faked GPS fix.
+async function hereAndNow(){
+  console.log('');
+  console.log('Chromium, here and now (location dot, follow, live clock)');
+  const browser = await chromium.launch(EXE.chromium ? { executablePath: EXE.chromium } : {});
+  const booted = p => p.waitForFunction(() => document.querySelector('#loading').style.display === 'none',
+                                        { timeout: 45000 });
+  // where the Pantheon is, in degrees, from the page's own place list
+  let ctx = await browser.newContext({ ...devices['iPhone 13'] });
+  let p = await ctx.newPage();
+  await p.goto(url); await booted(p);
+  const pan = await p.evaluate(() => {
+    const o = window.ombra, H = o.head, e = o.searchDest('Pantheon')[0], [x, y] = o.entryXY(e);
+    return { lat: H.proj.lat0 + y / H.proj.mperlat, lon: H.proj.lon0 + x / H.proj.mperlon, x, y };
+  });
+  check('nothing asks for location at launch when it was never allowed', await p.evaluate(() =>
+    window.ombra.me.watch === null));
+  await ctx.close();
+
+  // already granted: the app opens on you, following
+  ctx = await browser.newContext({ ...devices['iPhone 13'], permissions: ['geolocation'],
+                                   geolocation: { latitude: pan.lat, longitude: pan.lon, accuracy: 25 } });
+  p = await ctx.newPage();
+  const errs = []; p.on('pageerror', e => errs.push(e.message));
+  await p.goto(url); await booted(p);
+  await p.waitForFunction(() => window.ombra.me.t > 0, { timeout: 10000 }).catch(() => {});
+  const on = await p.evaluate(() => { const o = window.ombra, me = o.me, st = o.st;
+    return { follow: me.follow, inside: me.inside, d: Math.hypot(st.cx - me.x, st.cy - me.y),
+             pressed: document.querySelector('#btnLoc').getAttribute('aria-pressed'),
+             shown: !document.querySelector('#btnLoc').hidden }; });
+  check('with location already allowed, it opens on you and follows',
+        on.shown && on.inside && on.follow && on.d < 1 && on.pressed === 'true', JSON.stringify(on));
+  // dragging means looking elsewhere
+  const sb = await p.locator('#stage').boundingBox();
+  await p.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2); await p.mouse.down();
+  await p.mouse.move(sb.x + sb.width / 2 + 120, sb.y + sb.height / 2 + 60, { steps: 4 }); await p.mouse.up();
+  check('dragging the map stops it following', await p.evaluate(() =>
+    !window.ombra.me.follow && document.querySelector('#btnLoc').getAttribute('aria-pressed') === 'false'));
+  await p.click('#btnLoc'); await p.waitForTimeout(200);
+  check('the button brings it back', await p.evaluate(() => { const o = window.ombra;
+    return o.me.follow && Math.hypot(o.st.cx - o.me.x, o.st.cy - o.me.y) < 1; }));
+  await p.click('#btnLoc'); await p.waitForTimeout(100);
+  check('and pressed while following, switches location off',
+        await p.evaluate(() => window.ombra.me.watch === null));
+  // the route picker takes the fix it already has
+  await p.click('#btnLoc'); await p.waitForTimeout(400);
+  await p.click('#btnRoute'); await p.waitForTimeout(300);
+  await p.click('#pickGeo'); await p.waitForTimeout(300);
+  check('"Use my location" takes the fix the dot already has',
+        /^My location/.test(await p.inputValue('#rFromI')), await p.inputValue('#rFromI'));
+  await p.click('#rClose'); await p.waitForTimeout(200);
+  // closing the card used to leave the old text in the field, so reopening
+  // searched for it and the shortlist came back as "Nothing matched"
+  await p.click('#btnRoute'); await p.waitForTimeout(300);
+  const again = await p.evaluate(() => ({ rows: document.querySelectorAll('#rResults .res').length,
+                                          field: document.querySelector('#rFromI').value }));
+  check('reopening the route card starts clean, with the shortlist', again.rows > 5 && again.field === '',
+        `${again.rows} rows, field "${again.field}"`);
+  await p.click('#rClose'); await p.waitForTimeout(200);
+
+  // saved places: star an end, find it at the top of the picker, keep it across launches
+  p.on('dialog', d => d.accept('Hotel'));
+  await p.click('#btnRoute'); await p.waitForTimeout(300);
+  await p.click('#rResults .res'); await p.waitForTimeout(300);          // first landmark as A
+  await p.click('.star[data-w="a"]'); await p.waitForTimeout(150);
+  check('a chosen end can be saved', await p.evaluate(() =>
+    document.querySelector('.star[data-w="a"]').getAttribute('aria-pressed') === 'true'));
+  await p.click('#rClose'); await p.waitForTimeout(200);
+  await p.reload(); await booted(p);
+  await p.click('#btnRoute'); await p.waitForTimeout(300);
+  const top = await p.evaluate(() => { const r = document.querySelector('#rResults .res');
+    return r ? r.textContent : ''; });
+  check('and is the first thing offered, after a relaunch', /^Hotel\s*Saved$/.test(top.trim()), top.trim());
+  await p.click('#rResults .res'); await p.waitForTimeout(300);
+  check('one tap makes it an end of the walk', await p.inputValue('#rFromI') === 'Hotel');
+  await p.click('.star[data-w="a"]'); await p.waitForTimeout(150);
+  check('and the star takes it off the list again', await p.evaluate(() =>
+    !localStorage.getItem('ombra.saved').includes('Hotel')));
+  await p.click('#rClose'); await p.waitForTimeout(200);
+
+  // a tap on a church says whether it is open, with the caveat
+  const tap = await p.evaluate(() => {
+    const o = window.ombra, H = o.head, st = o.st, s = document.querySelector('#stage');
+    const i = H.ch.findIndex(c => c[0] === 'Pantheon');
+    st.scale = 0.9; st.cx = H.ox + H.ch[i][1] * H.qs; st.cy = H.oy + H.ch[i][2] * H.qs;
+    window.dispatchEvent(new Event('resize'));
+    const r = s.getBoundingClientRect();
+    return [r.left + r.width / 2, r.top + r.height / 2];
+  });
+  await p.waitForTimeout(400);
+  await p.mouse.click(tap[0], tap[1]); await p.waitForTimeout(300);
+  const said = await p.evaluate(() => { const t = document.querySelector('#toast');
+    return t.hidden ? '' : t.textContent; });
+  check('tapping a church says whether it is open, and where the hours come from',
+        /^Pantheon — (open|closed)/.test(said) && /OpenStreetMap/.test(said), said.slice(0, 60));
+  await p.click('#btnZfit'); await p.waitForTimeout(150);
+
+  // now: live until the clock is moved, and back on request
+  const live0 = await p.evaluate(() => window.ombra.st.live && document.querySelector('#btnNow').hidden);
+  check('the clock starts live', live0);
+  await p.evaluate(() => { const el = document.querySelector('#time');
+    el.value = (+el.value + 6) % 32; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  const moved = await p.evaluate(() => !window.ombra.st.live && !document.querySelector('#btnNow').hidden);
+  check('moving it by hand leaves it there, and offers the way back', moved);
+  await p.click('#btnNow'); await p.waitForTimeout(100);
+  const back = await p.evaluate(() => {
+    const st = window.ombra.st, n = new Date();
+    const ti = Math.max(0, Math.min(31, Math.round((n.getHours() + n.getMinutes() / 60 - 6) * 2)));
+    return { live: st.live, ti: st.ti, want: ti, hidden: document.querySelector('#btnNow').hidden };
+  });
+  check('"Back to now" returns to the present', back.live && back.hidden && Math.abs(back.ti - back.want) <= 1,
+        `slot ${back.ti} vs ${back.want}`);
+  // the date: today by default, a sampled date when one is chosen, Today to return
+  await p.evaluate(() => document.querySelector('#conToggle').click());
+  const d0 = await p.evaluate(() => ({ today: !!window.ombra.st.today,
+    pressed: document.querySelector('#dyToday').getAttribute('aria-pressed') }));
+  await p.evaluate(() => document.querySelector('.dy[data-d="15"]').click());
+  const d1 = await p.evaluate(() => ({ today: !!window.ombra.st.today,
+    clock: document.querySelector('#clkD').textContent }));
+  await p.evaluate(() => document.querySelector('#dyToday').click());
+  const d2 = await p.evaluate(() => ({ today: !!window.ombra.st.today,
+    day: String(new Date().getDate()), clock: document.querySelector('#clkD').textContent }));
+  check('the date is today, the 15th when chosen, and Today brings it back',
+        d0.today && d0.pressed === 'true' && !d1.today && /^15 /.test(d1.clock) &&
+        d2.today && d2.clock.startsWith(d2.day + ' '), `${d1.clock} -> ${d2.clock}`);
+  check('no page errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+
+  // granted, but far away: it says nothing at launch, and explains when asked
+  ctx = await browser.newContext({ ...devices['iPhone 13'], permissions: ['geolocation'],
+                                   geolocation: { latitude: 48.8566, longitude: 2.3522 } });   // Paris
+  p = await ctx.newPage();
+  await p.goto(url); await booted(p); await p.waitForTimeout(1500);
+  check('far from Rome, it opens quietly on the map', await p.evaluate(() =>
+    document.querySelector('#toast').hidden && window.ombra.me.watch === null));
+  await p.click('#btnLoc');
+  const note = await p.waitForFunction(() => !document.querySelector('#toast').hidden, { timeout: 8000 })
+                      .then(() => p.textContent('#toast'), () => '');
+  check('and when asked, says how far off the map you are', /from the edge of this map/.test(note),
+        note.slice(0, 50));
+  await browser.close();
+}
+
 async function freshness(){
   console.log('');
   console.log('Chromium, served over HTTP (how Pages serves it)');
@@ -664,6 +865,7 @@ await run(chromium, 'Chromium', false, 'chromium');
 await run(webkit, 'WebKit', false, 'webkit');
 await run(webkit, 'WebKit with the Streams API broken (iOS Quick Look)', true, 'webkit');
 await desktopLayout();
+await hereAndNow();
 await freshness();
 await installable();
 console.log(`\n${failures ? failures + ' CHECKS FAILED' : 'all checks passed'}`);

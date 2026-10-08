@@ -140,6 +140,35 @@ add("nax", q(np.array(nax), OX).tobytes(), "u2", len(nax))
 add("nay", q(np.array(nay), OY).tobytes(), "u2", len(nay))
 print("nasoni packed:", len(nax), "of", len(NASO), "fetched")
 
+# --- churches with opening hours ------------------------------------------------
+# Cool refuges, and only where the page can say whether they are open: a church
+# without hours, or with hours hours.py cannot read, is left out rather than
+# shown as a promise. Each is [name, qx, qy, rules], rules as hours.parse gives
+# them. 59 of the 314 churches in the bbox, in the data as fetched.
+from hours import parse as parse_hours
+CH = []
+for el in json.load(open(osm("extra_poi.json")))["elements"]:
+    t = el.get("tags", {}) or {}
+    if t.get("amenity") != "place_of_worship" or not t.get("name"): continue
+    rules = parse_hours(t.get("opening_hours"))
+    if not rules: continue
+    lon = el.get("lon", (el.get("center") or {}).get("lon"))
+    lat = el.get("lat", (el.get("center") or {}).get("lat"))
+    if lon is None or lat is None: continue
+    x, y = to_xy(lon, lat)
+    if not (bx0 <= x <= bx1 and by0 <= y <= by1): continue
+    CH.append([t["name"], int(round((float(x) - OX) / QS)), int(round((float(y) - OY) / QS)),
+               [[m, d, iv] for (m, d, iv) in rules]])
+NCHURCH = 0
+for el in json.load(open(osm("extra_poi.json")))["elements"]:
+    t = el.get("tags", {}) or {}
+    if t.get("amenity") != "place_of_worship" or not t.get("name"): continue
+    lon = el.get("lon", (el.get("center") or {}).get("lon")); lat = el.get("lat", (el.get("center") or {}).get("lat"))
+    if lon is None or lat is None: continue
+    x, y = to_xy(lon, lat)
+    if bx0 <= x <= bx1 and by0 <= y <= by1: NCHURCH += 1
+print("churches with readable hours packed:", len(CH), "of", NCHURCH)
+
 G=np.load(build("graph.npz"))
 add("eSeg",G["eSeg"].tobytes(),"u2",len(G["eSeg"]))
 add("eI0", G["eI0"].tobytes(), "u1",len(G["eI0"]))
@@ -158,7 +187,7 @@ pl=[[p["n"], CATS.index(p["c"]),
      int(round((to_xy(p["lon"],p["lat"])[1]-OY)/QS)), p["s"]] for p in PP["places"]]
 print("places packed:", len(pl), "cats", CATS)
 head=dict(sections=hdr, nbld=gj.get("nbld"), nknown=gj.get("nknown"),
-          ncad=gj.get("ncadastre"), nnaso=len(nax),
+          ncad=gj.get("ncadastre"), nnaso=len(nax), ch=CH, nchurch=NCHURCH,
           nnode=NNODE, nedge=NEDGE, ndate=NDATE, slots=SLOTS, city=CITY, pl=pl, cats=CATS, top=PP["top"], qs=QS, ox=OX, oy=OY, nseg=len(segs), nframe=T.shape[1],
           kinds=KINDS, names=names, frames=meta,
           bbox=dict(x0=float(bx0),y0=float(by0),x1=float(bx1),y1=float(by1)),
