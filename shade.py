@@ -94,26 +94,35 @@ def shade_mask(elev,az):
     return blocked
 
 n=len(CX); cnt=np.bincount(SI,minlength=len(segs)).astype(np.float64)
-frames=[]; meta=[]; t0=time.time()
-for (mo,day) in DATES:
-    tz=tz_for(2026,mo,day)
-    for (h,mi) in TIMES:
-        e,a=solar_pos(2026,mo,day,h,mi,LAT,LON,tz); e=float(e); a=float(a)
-        meta.append(dict(mo=mo,d=day,h=h,mi=mi,el=round(e,2),az=round(a,2),tz=tz))
-        if e<=3.0:
-            frames.append(np.full(len(segs),100,np.uint8)); continue
-        b=shade_mask(e,a)
-        pair=b[:n]|b[n:]
-        sh=np.bincount(SI,weights=pair.astype(np.float64),minlength=len(segs))
-        frames.append(np.round(np.where(cnt>0,sh/np.maximum(cnt,1)*100,0)).astype(np.uint8))
-    print("date",mo,day,"tz+%d"%tz,f"{time.time()-t0:.0f}s",flush=True)
 
-F=np.stack(frames)
-np.save(build("frames.npy"),F); json.dump(meta,open(build("frames_meta.json"),"w"))
-out=[]
-for s in segs:
-    lo,la=to_ll(np.array([p[0] for p in s["pts"]]),np.array([p[1] for p in s["pts"]]))
-    out.append(dict(n=s["name"],k=s["hw"],w=round(s["w"],1),c=1 if s["cov"] else 0,
-                    g=[[float(a),float(b)] for a,b in zip(lo,la)]))
-json.dump(out,open(build("segments.json"),"w"))
-print("frames",F.shape,f"{time.time()-t0:.0f}s")
+def frame(mo,day,h,mi,year=2026):
+    """One frame: the shade of every segment at a Rome civil time, as a percentage,
+    and its metadata. A function so that measure_dates.py can ask for dates the
+    build does not sample."""
+    tz=tz_for(year,mo,day)
+    e,a=solar_pos(year,mo,day,h,mi,LAT,LON,tz); e=float(e); a=float(a)
+    m=dict(mo=mo,d=day,h=h,mi=mi,el=round(e,2),az=round(a,2),tz=tz)
+    if e<=3.0:
+        return m, np.full(len(segs),100,np.uint8)
+    b=shade_mask(e,a)
+    pair=b[:n]|b[n:]
+    sh=np.bincount(SI,weights=pair.astype(np.float64),minlength=len(segs))
+    return m, np.round(np.where(cnt>0,sh/np.maximum(cnt,1)*100,0)).astype(np.uint8)
+
+if __name__ == "__main__":
+    frames=[]; meta=[]; t0=time.time()
+    for (mo,day) in DATES:
+        for (h,mi) in TIMES:
+            m,f=frame(mo,day,h,mi)
+            meta.append(m); frames.append(f)
+        print("date",mo,day,"tz+%d"%meta[-1]["tz"],f"{time.time()-t0:.0f}s",flush=True)
+
+    F=np.stack(frames)
+    np.save(build("frames.npy"),F); json.dump(meta,open(build("frames_meta.json"),"w"))
+    out=[]
+    for s in segs:
+        lo,la=to_ll(np.array([p[0] for p in s["pts"]]),np.array([p[1] for p in s["pts"]]))
+        out.append(dict(n=s["name"],k=s["hw"],w=round(s["w"],1),c=1 if s["cov"] else 0,
+                        g=[[float(a),float(b)] for a,b in zip(lo,la)]))
+    json.dump(out,open(build("segments.json"),"w"))
+    print("frames",F.shape,f"{time.time()-t0:.0f}s")
