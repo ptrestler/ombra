@@ -15,8 +15,8 @@ the 23rd of every month - and scores ways of standing in for them from the
 
 Scored on daylight segment-frames (sun above 3 degrees at the true time):
 mean absolute error in percentage points, and the share off by more than 10
-and 20 points. Needs a build (build/frames.npy and what shade.py reads); takes
-about as long as shade.py does for 24 dates, ~7 min. Run it, don't quote it.
+and 20 points. Needs a build (build/frames.npy and what shade.py reads); about
+3-4 min, the daylight half of 24 dates. Run it, don't quote it.
 """
 import math, json, time, numpy as np
 import shade
