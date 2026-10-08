@@ -146,6 +146,39 @@ async function run(engine, label, breakStreams, which) {
     await p.click('#btnZout'); await p.waitForTimeout(150); const z2 = await scale();
     check('zoom buttons zoom, and round-trip', z1 > z0 * 1.5 && Math.abs(z2 - z0) < 1e-9,
           `${z0.toFixed(3)} -> ${z1.toFixed(3)} -> ${z2.toFixed(3)}`);
+    // The map could be dragged until half the screen was empty. Zoomed in, a
+    // hard drag each way must stop with the map's edge within a panel's height
+    // of the screen's edge: 84 px under the masthead, 40 px elsewhere.
+    const edges = () => p.evaluate(() => {
+      const o = window.ombra, st = o.st, b = o.head.bbox, s = document.querySelector('#stage');
+      const W = s.clientWidth, H = s.clientHeight;
+      return { l: (b.x0 - st.cx) * st.scale + W / 2, r: W - ((b.x1 - st.cx) * st.scale + W / 2),
+               t: (st.cy - b.y1) * st.scale + H / 2, b: H - ((st.cy - b.y0) * st.scale + H / 2) };
+    });
+    await p.click('#btnZin'); await p.click('#btnZin'); await p.waitForTimeout(150);
+    const sb0 = await p.locator('#stage').boundingBox();
+    const cx0 = sb0.x + sb0.width / 2, cy0 = sb0.y + sb0.height / 2;
+    const gaps = {};
+    for (const [k, dx, dy] of [['l', 1, 0], ['r', -1, 0], ['t', 0, 1], ['b', 0, -1]]) {
+      for (let i = 0; i < 12; i++) {           // twelve hard flings, far past any edge
+        await p.mouse.move(cx0, cy0); await p.mouse.down();
+        await p.mouse.move(cx0 + dx * 150, cy0 + dy * 150, { steps: 3 }); await p.mouse.up();
+      }
+      await p.waitForTimeout(60);
+      gaps[k] = Math.round((await edges())[k]);
+    }
+    check('the map cannot be dragged off the screen', gaps.l <= 41 && gaps.r <= 41 &&
+          gaps.t <= 85 && gaps.b <= 41, JSON.stringify(gaps) + ' px of empty edge');
+    for (let i = 0; i < 12; i++) {             // until the button gives up
+      if (await p.evaluate(() => document.querySelector('#btnZout').disabled)) break;
+      await p.click('#btnZout');
+    }
+    await p.waitForTimeout(150);
+    const out = await edges();
+    check('or zoomed out past the whole map', Math.min(out.l + out.r, out.t + out.b) <= 2 &&
+          await p.evaluate(() => document.querySelector('#btnZout').disabled),
+          `smallest margin pair ${Math.round(Math.min(out.l + out.r, out.t + out.b))} px`);
+    await p.click('#btnZfit'); await p.waitForTimeout(150);
     const wheelZoom = (deltaY, deltaMode) => p.evaluate(([dy, dm]) => {
       const st = window.ombra.st, before = st.scale, stage = document.querySelector('#stage');
       const r = stage.getBoundingClientRect();

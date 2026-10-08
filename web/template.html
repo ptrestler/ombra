@@ -1182,7 +1182,8 @@ let pending=0;
 function drawAll(){ if(!D.bcnt) return; drawBase(); drawLines(); drawOver(); }
 function schedule(full){
   if(pending) return;
-  pending = requestAnimationFrame(()=>{ pending=0; if(full) drawAll(); else {drawLines();drawOver();} });
+  pending = requestAnimationFrame(()=>{ pending=0; clampView();
+    if(full) drawAll(); else {drawLines();drawOver();} });
 }
 
 /* ---------- sun / readouts ---------- */
@@ -2161,10 +2162,16 @@ function endPtr(e){
 }
 stage.addEventListener("pointerup", endPtr);
 stage.addEventListener("pointercancel", e=>{ptrs.delete(e.pointerId);dragging=false;stage.classList.remove("drag");});
-const ZMIN=0.045, ZMAX=6;
+const ZMAX=6;
+/* Out only as far as the whole map fitting the screen: past that it is a small
+   map in a field of nothing, and nothing on it can be read or tapped. */
+function zmin(){
+  const b=H.bbox;
+  return Math.min(W/(b.x1-b.x0), Hh/(b.y1-b.y0));
+}
 function zoomAt(mx,my,f){
   const wx=ux(mx), wy=uy(my);
-  st.scale = Math.max(ZMIN, Math.min(ZMAX, st.scale*f));
+  st.scale = Math.max(zmin(), Math.min(ZMAX, st.scale*f));
   st.cx = wx - (mx - W/2)/st.scale;
   st.cy = wy + (my - Hh/2)/st.scale;
   clampView(); schedule(true); syncZoomBtns();
@@ -2181,7 +2188,7 @@ function fitAll(){
 function syncZoomBtns(){
   const zi=$("#btnZin"), zo=$("#btnZout");
   if(zi) zi.disabled = st.scale >= ZMAX-1e-9;
-  if(zo) zo.disabled = st.scale <= ZMIN+1e-9;
+  if(zo) zo.disabled = st.scale <= zmin()*1.001;
 }
 /* `deltaY` is not comparable across devices: a mouse notch is about 100 px in
    Chromium, 3 *lines* in Firefox, and a trackpad sends a stream of single-digit
@@ -2205,10 +2212,26 @@ stage.addEventListener("dblclick", e=>{
   const r=stage.getBoundingClientRect();
   zoomAt(e.clientX-r.left, e.clientY-r.top, e.shiftKey ? 1/1.8 : 1.8);
 });
+/* The map's edge may come in from the screen's edge only as far as it takes to
+   bring the last street out from under whatever covers it - the masthead on
+   top, the route card on a phone - and no further. It used to let the centre
+   wander 400 m past the edge at any zoom, which zoomed in left half the screen
+   empty. In pixels rather than metres, so it means the same at every zoom.
+   When the whole map is smaller than the screen it is simply centred. Runs on
+   every frame (schedule), so every way of moving the map obeys it. */
 function clampView(){
-  const b=H.bbox, m=400;
-  st.cx=Math.max(b.x0-m,Math.min(b.x1+m,st.cx));
-  st.cy=Math.max(b.y0-m,Math.min(b.y1+m,st.cy));
+  if(!H || !H.bbox || !W) return;
+  const b=H.bbox, card=$("#rcard");
+  const under = W < 520 && card.classList.contains("open") ? card.offsetHeight + 24 : 0;
+  const padT=84, padB=Math.max(40, under), padS=40;
+  const hw=W/2/st.scale, hh=Hh/2/st.scale;
+  const fit = (lo, hi, c, lowPad, highPad, half) => {
+    const a = lo + half - lowPad/st.scale, z = hi - half + highPad/st.scale;
+    return a <= z ? Math.max(a, Math.min(z, c)) : (lo + hi)/2;
+  };
+  st.cx = fit(b.x0, b.x1, st.cx, padS, padS, hw);
+  // y grows north, so the bottom of the screen is the map's south edge
+  st.cy = fit(b.y0, b.y1, st.cy, padB, padT, hh);
 }
 
 /* ---------- controls ---------- */
