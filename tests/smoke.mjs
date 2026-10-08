@@ -78,6 +78,39 @@ async function run(engine, label, breakStreams, which) {
     });
     check('every date unpacks into its own frames', rt.worst <= 0.006,
           `worst frame ${rt.at} of ${rt.n} off by ${rt.worst} pp`);
+    // Today is answered with the frame whose sun is closest in the sky, found
+    // with a port of solar.py. It must agree with the sun the build computed,
+    // to the 0.01 degrees the header rounds to, on every frame - and with
+    // shade.py's clock-change rule.
+    const sun = await p.evaluate(() => {
+      const o = window.ombra, H = o.head;
+      let del = 0, daz = 0, tz = 0;
+      for (const m of H.frames) {
+        const [el, az] = o.solarPos(2026, m.mo, m.d, m.h, m.mi, 41.8965, 12.48, m.tz);
+        del = Math.max(del, Math.abs(el - m.el));
+        daz = Math.max(daz, m.el > 0 ? Math.abs(((az - m.az + 540) % 360) - 180) : 0);
+        if (o.romeTZ(2026, m.mo, m.d) !== m.tz) tz++;
+      }
+      return { del: +del.toFixed(4), daz: +daz.toFixed(4), tz };
+    });
+    check('the page finds the sun where the build did', sun.del <= 0.011 && sun.daz <= 0.011 && sun.tz === 0,
+          `worst ${sun.del} deg up, ${sun.daz} deg round, ${sun.tz} clock-rule misses`);
+    // 23 October at 14:00: the nearest sampled date is 1 November, after the
+    // clocks go back - an hour of sun away. The closest-sun frame is not.
+    const oct = await p.evaluate(() => {
+      const o = window.ombra, st = o.st, H = o.head;
+      const keep = { live: st.live, today: st.today, mo: st.mo, day: st.day, ti: st.ti };
+      st.live = false; st.today = { mo: 9, d: 23 }; st.mo = 10; st.day = 1; st.ti = 16;
+      const s = o.sunAt(16), f = H.frames[s.fi], old = H.frames[(10 * 2) * 32 + 16];
+      const ang = (a, b) => { const u = x => [Math.cos(x.el*Math.PI/180)*Math.sin(x.az*Math.PI/180),
+        Math.cos(x.el*Math.PI/180)*Math.cos(x.az*Math.PI/180), Math.sin(x.el*Math.PI/180)];
+        const p = u(a), q = u(b); return Math.acos(Math.min(1, p[0]*q[0]+p[1]*q[1]+p[2]*q[2])) * 180 / Math.PI; };
+      const out = { now: +ang(s, f).toFixed(2), was: +ang(s, old).toFixed(2), from: f.mo + '/' + f.d + ' ' + f.h + ':' + f.mi };
+      Object.assign(st, keep);
+      return out;
+    });
+    check('a day between samples gets a frame with the sun where it really is', oct.now < 2 && oct.was > 10,
+          `23 Oct 14:00 -> ${oct.from}, ${oct.now} deg off; nearest date was ${oct.was} deg off`);
     check('Piazza Trilussa shaded at 18:00', d.trilussa > 85, `${d.trilussa}%`);
     // street lookup and routing
     await p.fill('#search', 'Via Giulia'); await p.press('#search', 'Enter');
@@ -703,6 +736,19 @@ async function hereAndNow(){
   });
   check('"Back to now" returns to the present', back.live && back.hidden && Math.abs(back.ti - back.want) <= 1,
         `slot ${back.ti} vs ${back.want}`);
+  // the date: today by default, a sampled date when one is chosen, Today to return
+  await p.evaluate(() => document.querySelector('#conToggle').click());
+  const d0 = await p.evaluate(() => ({ today: !!window.ombra.st.today,
+    pressed: document.querySelector('#dyToday').getAttribute('aria-pressed') }));
+  await p.evaluate(() => document.querySelector('.dy[data-d="15"]').click());
+  const d1 = await p.evaluate(() => ({ today: !!window.ombra.st.today,
+    clock: document.querySelector('#clkD').textContent }));
+  await p.evaluate(() => document.querySelector('#dyToday').click());
+  const d2 = await p.evaluate(() => ({ today: !!window.ombra.st.today,
+    day: String(new Date().getDate()), clock: document.querySelector('#clkD').textContent }));
+  check('the date is today, the 15th when chosen, and Today brings it back',
+        d0.today && d0.pressed === 'true' && !d1.today && /^15 /.test(d1.clock) &&
+        d2.today && d2.clock.startsWith(d2.day + ' '), `${d1.clock} -> ${d2.clock}`);
   check('no page errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 

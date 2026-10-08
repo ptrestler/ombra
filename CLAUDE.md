@@ -47,7 +47,7 @@ position), `heights.py` (OSM height tags → metres, plus the cadastre lookup),
 `buildings.py` (the outlines, shared by the build and the report),
 `streets.py` (segmentation).
 
-Five scripts that measure rather than build, none on the `make` path:
+Six scripts that measure rather than build, none on the `make` path:
 `measure_heights.py` (`make heights`) scores every height source against the OSM
 tags and prints the tables `heights.py` quotes; `compare_frames.py` diffs two
 `build/frames.npy` so a model change can be seen rather than assumed; and
@@ -56,7 +56,10 @@ footprint-overlap matching, which sounds like the obvious next win and is not;
 `measure_via.mjs` (needs a build) scores which fountain "Route via one"
 picks, on 300 random dry walks; and `measure_boot.mjs` (needs a build) times
 each boot stage at desktop speed and with the CPU slowed 4×, from the
-`window.ombra.BOOT` laps the page records.
+`window.ombra.BOOT` laps the page records; and `measure_dates.py` (needs a
+build, ~4 min) computes the real shade for the 8th and 23rd of every month
+with `shade.frame()` and scores the ways the page can stand in for a day it
+does not sample.
 
 ## How the shade model works
 
@@ -255,6 +258,36 @@ replace it — but the browser still fetches the next `sw.js` on launch, and a
 waiting worker takes over once every window using the old one is closed. So the
 fix for a bad deploy is another deploy, and "close the app and reopen it" is
 what to tell anyone stuck on it.
+
+**Today is answered with the closest sun, not the nearest date.** The model
+samples the 1st and 15th; every other day the page used to show the nearest of
+those at the same clock time. `measure_dates.py` scored that against the real
+shade of the 8th and 23rd of every month: **3.03 pp** mean error, 4.37 % of
+street-frames off by more than 20 — and **12.9 pp** around the clock changes,
+where 23 October at 14:00 was answered with 1 November at 14:00, after the
+clocks go back: an hour of sun away. Blending the two dates either side scored
+2.29. Taking the stored frame, from *any* date, whose sun is closest in the sky
+scored **1.63 pp** (2.37 %), 2.47 across the clock changes; blending the two
+closest suns did no better (1.67). Shade depends on the sun's direction and
+nothing else in this model, so 23 October is answered from 15 February, whose
+afternoon sun is 1° away. `solarPos` in the template is `solar.py` line for
+line, and the smoke test holds it to the build's own sun on all 768 frames
+(0.005° worst) and to `shade.py`'s clock-change rule. `sunAt(t)` is the one place
+a slot becomes a frame; it does not unpack shade, `frameAt(t)` does — the
+daylight band needs only the sun's height, and loading through it unpacked two
+dates at boot. Choosing a month or the 1st/15th still shows that sampled date
+exactly.
+
+**Location, now and saved places are the installed app's, and each is
+cautious in a specific way.** The dot is ink and panel like every other mark,
+with a halo the size of the fix's accuracy. It starts by itself only where
+permission is *already* granted — never a prompt at launch — and a fix far off
+the map stops the GPS silently at launch and explains itself only when the
+button asked. The clock follows real time (every 30 s, and on return to the
+front) until the hour is moved by hand; moving the hour keeps today's date,
+choosing a date leaves it, and **Back to now** restores both. Saved places are
+stored as positions, not node numbers — every rebuild renumbers the nodes and a
+saved hotel would quietly move — and matched back within 25 m.
 
 **"Route via one" is scored on the dry stretch, not on the detour.** The
 obvious rule — the fountain that adds least — chose one the walk already passed

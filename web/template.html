@@ -619,6 +619,7 @@ tr.row:hover td{background:var(--panel-2)}
     <div class="months" id="months"><div class="dayseg" id="dayseg">
       <button class="dy" data-d="1"  aria-pressed="false">1st</button>
       <button class="dy" data-d="15" aria-pressed="true">15th</button>
+      <button class="dy" id="dyToday" aria-pressed="false">Today</button>
     </div></div>
 
     <div class="actions">
@@ -856,8 +857,8 @@ function nowFrame(){
     if(dom < 8) day = 1;
     else if(dom < 23) day = 15;
     else { day = 1; mo = (mo + 1) % 12; }
-    return {mo, day, ti};
-  }catch(e){ return {mo:7, day:15, ti:16}; }
+    return {mo, day, ti, today:{mo:n.getMonth(), d:dom}};
+  }catch(e){ return {mo:7, day:15, ti:16, today:null}; }
 }
 /* Distances are metric in the model and always will be - the panel describing
    40-metre segments and a 2-metre height grid stays as it is. This only changes
@@ -909,14 +910,15 @@ const AWAY = (()=>{ try{
   return Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Rome"
     ? "" : " · Rome";
 }catch(e){ return " · Rome"; } })();
-const st = {mo:NOW.mo, day:NOW.day, ti:NOW.ti, live:true, scale:1, cx:0, cy:0, sel:-1, hi:null,
+const st = {mo:NOW.mo, day:NOW.day, ti:NOW.ti, live:true, today:NOW.today, scale:1, cx:0, cy:0, sel:-1, hi:null,
             routing:false, a:-1, b:-1, k:1.2, route:null, refRoute:null,
             aL:"", bL:"", pick:null, mapPick:null, via:false};
 const dateIdx = () => st.mo*2 + (st.day===15?1:0);
 /* Every read of the shade goes through here for its date, so this is where a
    date that has not been unpacked yet gets unpacked. */
 const dateBase = () => { const d = dateIdx(); loadDate(d); return d*32; };
-const dayLabel = () => (st.day===1?"1":"15");
+const dayLabel = () => st.today ? String(st.today.d) : (st.day===1?"1":"15");
+const shownMo = () => st.today ? st.today.mo : st.mo;
 
 /* ---------- canvases ---------- */
 const stage=$("#stage"), cvBase=$("#base"), cvLine=$("#lines"), cvOver=$("#over");
@@ -1105,7 +1107,91 @@ function prepSegs(){
   const cnt=D.scnt; SEGOFF=new Int32Array(cnt.length); SEGN=cnt;
   let p=0; for(let i=0;i<cnt.length;i++){SEGOFF[i]=p;p+=cnt[i];}
 }
-function frameIndex(){ return dateBase() + st.ti; }
+/* ---------- the sun, on any day ---------- */
+/* The model is sampled on the 1st and 15th. Every other day of the year, the
+   page used to show the nearest of those at the same clock time - and shade is
+   a matter of where the sun is, not of the date, so that was a stand-in and
+   not always a good one. measure_dates.py computed the real shade for the 8th
+   and 23rd of every month and scored the ways of standing in for it: the
+   nearest date was off by 3.03 pp on average (4.37 % of street-frames by more
+   than 20), and by 12.9 pp around the clock changes, where 23 October at
+   14:00 was answered with 1 November at 14:00 - an hour of sun away. Blending
+   the two dates either side: 2.29 pp. Taking the frame, from any date, whose
+   sun is closest in the sky: 1.63 pp (2.37 %), and 2.47 pp across the clock
+   changes. Blending the two closest suns did no better (1.67). So today is
+   answered with the closest sun, worked out here with shade.py's own NOAA
+   formula and observer. */
+const SUN_LAT = 41.8965, SUN_LON = 12.4800;
+const RAD = Math.PI/180;
+function lastSunday(y, m){           // m 1..12
+  const d = new Date(Date.UTC(y, m, 0));
+  return d.getUTCDate() - d.getUTCDay();
+}
+function romeTZ(y, m, d){            // CEST from the last Sunday of March to that of October
+  const k = m*100 + d;
+  return (k >= 300 + lastSunday(y, 3) && k < 1000 + lastSunday(y, 10)) ? 2 : 1;
+}
+function solarPos(y, m, d, h, mi, lat, lon, tz){       // solar.py, line for line
+  const jd0 = Date.UTC(y, m-1, d)/86400000 + 2440587.5;
+  const jd = jd0 + (h + mi/60 - tz)/24, jc = (jd - 2451545)/36525;
+  const gmls = (280.46646 + jc*(36000.76983 + jc*0.0003032)) % 360;
+  const gmas = 357.52911 + jc*(35999.05029 - 0.0001537*jc);
+  const ecc = 0.016708634 - jc*(0.000042037 + 0.0000001267*jc);
+  const r = gmas*RAD;
+  const seq = Math.sin(r)*(1.914602 - jc*(0.004817 + 0.000014*jc)) +
+              Math.sin(2*r)*(0.019993 - 0.000101*jc) + Math.sin(3*r)*0.000289;
+  const sal = gmls + seq - 0.00569 - 0.00478*Math.sin((125.04 - 1934.136*jc)*RAD);
+  const seo = 23 + (26 + ((21.448 - jc*(46.815 + jc*(0.00059 - jc*0.001813))))/60)/60;
+  const oc = seo + 0.00256*Math.cos((125.04 - 1934.136*jc)*RAD);
+  const decl = Math.asin(Math.sin(oc*RAD)*Math.sin(sal*RAD))/RAD;
+  const yy = Math.tan(oc/2*RAD)**2, gr = gmls*RAD, gar = gmas*RAD;
+  const eqt = 4*(yy*Math.sin(2*gr) - 2*ecc*Math.sin(gar) + 4*ecc*yy*Math.sin(gar)*Math.cos(2*gr)
+                 - 0.5*yy*yy*Math.sin(4*gr) - 1.25*ecc*ecc*Math.sin(2*gar))/RAD;
+  const tst = (((h*60 + mi + eqt + 4*lon - 60*tz) % 1440) + 1440) % 1440;
+  const ha = tst/4 - 180;
+  const latr = lat*RAD, dr = decl*RAD, har = ha*RAD;
+  const cz = Math.max(-1, Math.min(1, Math.sin(latr)*Math.sin(dr) + Math.cos(latr)*Math.cos(dr)*Math.cos(har)));
+  const zen = Math.acos(cz)/RAD;
+  const ca = Math.max(-1, Math.min(1, (Math.sin(latr)*cz - Math.sin(dr))/(Math.cos(latr)*Math.sin(zen*RAD))));
+  let az = Math.acos(ca)/RAD;
+  az = ha > 0 ? (az + 180) % 360 : (540 - az) % 360;
+  return [90 - zen, az];
+}
+let FSUN = null;                     // the unit vector of every frame's sun
+const SUNCACHE = new Map();
+function sunAt(t){
+  /* {fi, el, az}: the frame that stands for slot t on the shown day, and where
+     the sun really is then. A sampled date is its own answer. */
+  if(!st.today){
+    const fi = dateBase() + t, m = H.frames[fi];
+    return {fi, el:m.el, az:m.az};
+  }
+  const key = st.today.mo + "|" + st.today.d + "|" + t;
+  let hit = SUNCACHE.get(key);
+  if(!hit){
+    const y = new Date().getFullYear(), m = st.today.mo + 1, d = st.today.d;
+    const [el, az] = solarPos(y, m, d, 6 + Math.floor(t/2), t%2 ? 30 : 0, SUN_LAT, SUN_LON, romeTZ(y, m, d));
+    let fi;
+    if(el <= 3) fi = (st.mo*2 + (st.day === 15 ? 1 : 0))*32 + t;   // night is night on any date
+    else{
+      if(!FSUN) FSUN = H.frames.map(f => f.el > 3
+        ? [Math.cos(f.el*RAD)*Math.sin(f.az*RAD), Math.cos(f.el*RAD)*Math.cos(f.az*RAD), Math.sin(f.el*RAD)] : null);
+      const u = [Math.cos(el*RAD)*Math.sin(az*RAD), Math.cos(el*RAD)*Math.cos(az*RAD), Math.sin(el*RAD)];
+      let best = -2; fi = 0;
+      for(let i=0;i<FSUN.length;i++){
+        const v = FSUN[i]; if(!v) continue;
+        const c = v[0]*u[0] + v[1]*u[1] + v[2]*u[2];
+        if(c > best){ best = c; fi = i; }
+      }
+    }
+    hit = {fi, el, az}; SUNCACHE.set(key, hit);
+  }
+  return hit;
+}
+// only reading a frame's shade unpacks its date: the daylight band needs the
+// sun's height, not the streets, and would otherwise unpack two dates at boot
+const frameAt = t => { const fi = sunAt(t).fi; loadDate(Math.floor(fi / 32)); return fi; };
+function frameIndex(){ return frameAt(st.ti); }
 function shadeOf(seg, fi){ return D.shade[seg*H.nframe + fi]; }
 
 function drawLines(){
@@ -1249,16 +1335,18 @@ function loadDate(d){
 let cityAvg = null;
 
 function updateReadouts(){
-  const fi = frameIndex(), m = H.frames[fi];
+  const m = sunAt(st.ti), fi = m.fi;
   $("#clkT").textContent = fmtTime(st.ti);
-  $("#clkD").textContent = dayLabel() + " " + MONTH[st.mo] + AWAY;
+  $("#clkD").textContent = dayLabel() + " " + MONTH[shownMo()] + AWAY;
   const up = m.el > 0;
   $("#sunEl").textContent = up ? Math.round(m.el)+"\u00b0" : "down";
   $("#sunAz").textContent = up ? COMPASS(m.az) : "\u2014";
   $("#cityShade").textContent = up ? Math.round(cityAvg[fi])+"%" : "night";
   $("#time").value = st.ti;
-  document.querySelectorAll(".mo").forEach((b,i)=>b.setAttribute("aria-pressed", i===st.mo));
-  document.querySelectorAll(".dy").forEach(b=>b.setAttribute("aria-pressed", +b.dataset.d===st.day));
+  // today is neither the 1st nor the 15th, so neither of those is pressed
+  document.querySelectorAll(".mo").forEach((b,i)=>b.setAttribute("aria-pressed", i===shownMo()));
+  document.querySelectorAll(".dy[data-d]").forEach(b=>b.setAttribute("aria-pressed", !st.today && +b.dataset.d===st.day));
+  $("#dyToday").setAttribute("aria-pressed", st.today ? "true" : "false");
   paintDaylight();
   if(st.routing && st.a>=0 && st.b>=0){ recompute(); renderRoute(); }
   if(!sheetOpen || sheetTab!=="how") renderList();
@@ -1266,9 +1354,8 @@ function updateReadouts(){
 }
 
 function paintDaylight(){
-  const base = dateBase();
   let a=-1,b=-1;
-  for(let t=0;t<32;t++){ if(H.frames[base+t].el>0){ if(a<0)a=t; b=t; } }
+  for(let t=0;t<32;t++){ if(sunAt(t).el>0){ if(a<0)a=t; b=t; } }
   const el=$("#daylight");
   if(a<0){ el.style.display="none"; return; }
   el.style.display="block";
@@ -1308,15 +1395,15 @@ function renderList(){
   const asc = sheetTab==="sun";
   rows.sort((a,b)=> (asc ? a.v-b.v : b.v-a.v) || (b.n-a.n));
   const top = rows.slice(0,60);
-  const night = H.frames[fi].el<=0;
+  const night = sunAt(st.ti).el<=0;
   let html = "";
   if(night){
     html = '<p class="prose">The sun is below the horizon at '+fmtTime(st.ti)+' on '+
-           dayLabel()+' '+MONTHFULL[st.mo]+'. Everything is shade. Move the scrubber into daylight.</p>';
+           dayLabel()+' '+MONTHFULL[shownMo()]+'. Everything is shade. Move the scrubber into daylight.</p>';
   } else {
     html = '<p class="prose" style="margin:2px 0 12px">'+
       (asc ? 'Most exposed named streets at ' : 'Shadiest named streets at ')+
-      '<b>'+fmtTime(st.ti)+', '+dayLabel()+' '+MONTHFULL[st.mo]+'</b>, walking on the better side.</p>'+
+      '<b>'+fmtTime(st.ti)+', '+dayLabel()+' '+MONTHFULL[shownMo()]+'</b>, walking on the better side.</p>'+
       '<table><thead><tr><th>Street</th><th class="num">Shade</th></tr></thead><tbody>';
     for(const r of top){
       html += '<tr class="row" data-name="'+r.nm.replace(/"/g,"&quot;")+'"><td>'+
@@ -1364,9 +1451,11 @@ into shade well before the flat-earth version thought they would. Rays reach up 
 <li>Sun position comes from the NOAA solar-position algorithm for Rome's latitude, on the
 <b>1st and 15th of every month</b> \u2014 24 dates, each at half-hour steps. Times are Rome
 civil time, with summer time applied on the real EU dates (29 March to 25 October in 2026).</li>
-<li>Sampling twice a month keeps the sun within about 2\u00b0 of where it actually is on
-any given day. The gap matters most around the equinoxes, when the sun's height changes
-fastest, and least at the solstices.</li>
+<li>On every other day, the map works out where the sun really is and shows the stored
+moment with the sun closest to that \u2014 shade depends on where the sun is, not on the
+date. Checked against the real shade computed for the 8th and 23rd of every month, that
+is off by <b>1.6 points</b> on average; showing the nearest sampled date instead was off by
+3.0, and by 12.9 around the clock changes, when it answered with a sun an hour away.</li>
 </ul>
 
 <h3>Planning a walk</h3>
@@ -1524,7 +1613,7 @@ function renderCard(){
   const v = s/ids.length;
   $("#cName").textContent = nm;
   $("#cSub").textContent = (KINDLABEL[H.kinds[D.kind[ids[0]]]]||"") + " \u00b7 " +
-    fmtLen(ids.length*40) + " \u00b7 " + dayLabel() + " " + MONTH[st.mo];
+    fmtLen(ids.length*40) + " \u00b7 " + dayLabel() + " " + MONTH[shownMo()];
   $("#cPct").textContent = Math.round(v);
   $("#cPct").parentElement.style.color = rampInk(v);
   drawStrip("#strip", ids.map(i=>[i,1]), 62);
@@ -1535,13 +1624,14 @@ function drawStrip(sel, pairs, h){
   const w=Math.max(200,Math.round(r.width));
   cv.width=Math.round(w*DPR); cv.height=Math.round(h*DPR);
   const ctx=cv.getContext("2d"); ctx.setTransform(DPR,0,0,DPR,0,0); ctx.clearRect(0,0,w,h);
-  const base=dateBase(), pad=3;
+  const pad=3, fr=[], el=[];
+  for(let t=0;t<32;t++){ const m=sunAt(t); fr.push(frameAt(t)); el.push(m.el); }
   const vals=[]; let wt=0;
   for(const pr of pairs) wt+=pr[1];
   wt = wt||1;
   for(let t=0;t<32;t++){
     let acc=0;
-    for(const pr of pairs) acc += D.shade[pr[0]*H.nframe+base+t]*pr[1];
+    for(const pr of pairs) acc += D.shade[pr[0]*H.nframe+fr[t]]*pr[1];
     vals.push(acc/wt);
   }
   const X=t=>pad+t/31*(w-2*pad), Y=v=>h-8-(v/100)*(h-16);
@@ -1549,7 +1639,7 @@ function drawStrip(sel, pairs, h){
   ctx.fillStyle=C.line; ctx.globalAlpha=.55;
   let runStart=-1;
   for(let t=0;t<=32;t++){
-    const dark = t<32 && H.frames[base+t].el<=0;
+    const dark = t<32 && el[t]<=0;
     if(dark && runStart<0) runStart=t;
     if(!dark && runStart>=0){
       const a=X(runStart)-(w-2*pad)/62, b2=X(t-1)+(w-2*pad)/62;
@@ -1577,8 +1667,8 @@ function drawStrip(sel, pairs, h){
   ctx.beginPath(); ctx.arc(nx,ny,4.5,0,7); ctx.fillStyle=rampFor(vals[st.ti]);
   ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=C.panel; ctx.stroke();
   // worst moment of the day, direct-labelled
-  let lo=0; for(let t=0;t<32;t++) if(H.frames[base+t].el>3 && vals[t]<vals[lo]) lo=t;
-  if(H.frames[base+lo].el>3 && vals[lo] < 96){
+  let lo=0; for(let t=0;t<32;t++) if(el[t]>3 && vals[t]<vals[lo]) lo=t;
+  if(el[lo]>3 && vals[lo] < 96){
     const lx=X(lo), ly=Y(vals[lo]);
     ctx.beginPath(); ctx.arc(lx,ly,3,0,7); ctx.fillStyle=C.sun; ctx.fill();
     ctx.font="600 10px Archivo, sans-serif"; ctx.fillStyle=C.muted;
@@ -1951,7 +2041,7 @@ function renderRoute(){
     $("#rSub").textContent="Those two points aren't joined in the street network.";
     $("#rPct").textContent="\u2014"; $("#rCompare").innerHTML=""; return; }
   $("#rTitle").textContent = fmtLen(r.len)+" \u00b7 "+fmtMin(r.len);
-  $("#rSub").textContent = "at "+fmtTime(st.ti)+", "+dayLabel()+" "+MONTH[st.mo]+
+  $("#rSub").textContent = "at "+fmtTime(st.ti)+", "+dayLabel()+" "+MONTH[shownMo()]+
     " \u00b7 "+fmtLen(r.len*(1-r.shade/100))+" in the sun";
   $("#rPct").textContent = Math.round(r.shade);
   $("#rBig").style.color = rampInk(r.shade);
@@ -2209,13 +2299,19 @@ function toast(msg, ms){
    time every 30 s and whenever the app comes back to the front; moving the
    hour or the date by hand leaves it where you put it, and "Back to now"
    appears to return. */
-function leaveNow(){ if(st.live){ st.live = false; $("#btnNow").hidden = false; } }
+/* Moving the hour stops the clock but keeps today; choosing a month or the
+   1st/15th goes to that sampled date exactly. */
+function leaveNow(date){
+  if(st.live){ st.live = false; $("#btnNow").hidden = false; }
+  if(date && st.today){ st.today = null; $("#btnNow").hidden = false; }
+}
 function goNow(){
   const n = nowFrame();
-  const moved = n.mo !== st.mo || n.day !== st.day || n.ti !== st.ti;
+  const t = n.today || {mo:-1, d:-1}, was = st.today || {mo:-2, d:-2};
+  const moved = n.mo !== st.mo || n.day !== st.day || n.ti !== st.ti || t.mo !== was.mo || t.d !== was.d;
   st.live = true; $("#btnNow").hidden = true;
   if(!moved) return;
-  st.mo = n.mo; st.day = n.day; st.ti = n.ti;
+  st.mo = n.mo; st.day = n.day; st.ti = n.ti; st.today = n.today;
   if(H) { updateReadouts(); schedule(false); }
 }
 setInterval(() => { if(st.live && !document.hidden) goNow(); }, 30000);
@@ -2790,7 +2886,7 @@ const BOOT = {};
     if(H.sections.nax){ D.naX=dq(view(buf,"nax"),ox); D.naY=dq(view(buf,"nay"),oy); }
     D.kind=view(buf,"kind"); D.name=view(buf,"name"); D.cov=view(buf,"cov");
     D.shade=new Uint8Array(H.nseg*H.nframe); SHB=lines.slice(1); cityAvg=H.city;
-    dateBase(); lap("date");
+    frameIndex(); lap("date");
     D.eSeg=view(buf,"eSeg"); D.eI0=view(buf,"eI0"); D.eI1=view(buf,"eI1");
     D.eU=view(buf,"eU"); D.eV=view(buf,"eV"); D.eLen=view(buf,"eLen");
     lap("unpack");
@@ -2799,11 +2895,19 @@ const BOOT = {};
 
     // months
     const mc=$("#months");
-    mc.querySelectorAll(".dy").forEach(b=>b.addEventListener("click",()=>{
-      st.day=+b.dataset.d; leaveNow(); updateReadouts(); schedule(false); }));
+    mc.querySelectorAll(".dy[data-d]").forEach(b=>b.addEventListener("click",()=>{
+      st.day=+b.dataset.d; leaveNow(true); updateReadouts(); schedule(false); }));
+    // today's real date, at whatever hour is showing: the clock stays put
+    $("#dyToday").addEventListener("click", ()=>{
+      const n = nowFrame(); if(!n.today) return;
+      st.today = n.today; st.mo = n.mo; st.day = n.day; leaveNow();
+      updateReadouts(); schedule(false);
+    });
     MONTH.forEach((m,i)=>{ const b=document.createElement("button");
       b.className="mo"; b.textContent=m; b.setAttribute("aria-pressed", i===st.mo);
-      b.addEventListener("click",()=>{ st.mo=i; leaveNow(); updateReadouts(); schedule(false); });
+      b.addEventListener("click",()=>{
+        // a month chosen from today keeps the sampled day nearest today
+        st.mo=i; leaveNow(true); updateReadouts(); schedule(false); });
       mc.appendChild(b); });
 
     resize();
@@ -2812,7 +2916,7 @@ const BOOT = {};
     locateIfAllowed();
     window.ombra = {st, BOOT, setPoint, setEnd, openPick, searchDest, entryXY, recompute, rampInk,
                     BUILD, checkFresh,
-                    renderRoute, frameIndex, nearestNode, labelForNode, nasoNodes, loadDate, me, goNow,
+                    renderRoute, frameIndex, sunAt, solarPos, romeTZ, nearestNode, labelForNode, nasoNodes, loadDate, me, goNow,
                     nodeXY:i=>[NODEX[i],NODEY[i]], comp:i=>COMP[i], bigc:()=>BIGC,
                     screenXY:i=>[sx(NODEX[i]),sy(NODEY[i])],   // where it is on screen now
                     get data(){return D}, get head(){return H}};
