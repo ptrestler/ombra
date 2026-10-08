@@ -49,6 +49,7 @@ async function run(engine, label, breakStreams, which) {
     // data round-trip: these must match tests/validate.py exactly
     const d = await p.evaluate(() => {
       const O = window.ombra, H = O.head, D = O.data, base = ((8 - 1) * 2 + 1) * 32;
+      O.loadDate((8 - 1) * 2 + 1);             // shade is unpacked a date at a time
       const at = (name, h) => {
         const ni = H.names.indexOf(name); if (ni < 0) return null;
         let s = 0, n = 0;
@@ -58,6 +59,22 @@ async function run(engine, label, breakStreams, which) {
       return { fori: at('Via dei Fori Imperiali', 14), trilussa: at('Piazza Trilussa', 18) };
     });
     check('Fori Imperiali unshaded at 14:00', d.fori === 0, `${d.fori}%`);
+    // Shade is unpacked one date at a time, so a date can be missing or land in
+    // the wrong frames without the named streets noticing. The build ships the
+    // city mean of every frame; unpack every date and recompute it from D.shade.
+    const rt = await p.evaluate(() => {
+      const O = window.ombra, H = O.head, D = O.data;
+      let worst = 0, at = -1;
+      for (let d = 0; d < H.ndate; d++) O.loadDate(d);
+      for (let f = 0; f < H.nframe; f++) {
+        let s = 0; for (let i = 0; i < H.nseg; i++) s += D.shade[i * H.nframe + f];
+        const e = Math.abs(s / H.nseg - H.city[f]);
+        if (e > worst) { worst = e; at = f; }
+      }
+      return { worst: +worst.toFixed(3), at, n: H.nframe };
+    });
+    check('every date unpacks into its own frames', rt.worst <= 0.006,
+          `worst frame ${rt.at} of ${rt.n} off by ${rt.worst} pp`);
     check('Piazza Trilussa shaded at 18:00', d.trilussa > 85, `${d.trilussa}%`);
     // street lookup and routing
     await p.fill('#search', 'Via Giulia'); await p.press('#search', 'Enter');

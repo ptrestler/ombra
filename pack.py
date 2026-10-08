@@ -108,7 +108,15 @@ add("sy",q(np.array(SYl),OY).tobytes(),"u2",len(SYl))
 add("kind",np.array(kind,np.uint8).tobytes(),"u1",len(kind))
 add("name",np.array(nm,"<u2").tobytes(),"u2",len(nm))
 add("cov",np.array(cov,np.uint8).tobytes(),"u1",len(cov))
-add("shade",T.tobytes(),"u1",T.size)
+# Shade is not in this blob. It is 29 of the 31 MB unpacked, and the page only
+# ever reads one date of it at a time, so each date goes in a gzip stream of its
+# own (see the end of this file) and the page inflates the one it is showing.
+# Within a date it stays segment-major: that is what keeps it small.
+SLOTS=32
+assert T.shape[1] % SLOTS == 0
+NDATE=T.shape[1]//SLOTS
+# the city-wide mean per frame, which is the one thing that read every date
+CITY=[round(float(v),2) for v in T.mean(axis=0)]
 
 # --- nasoni ------------------------------------------------------------------
 # Rome's public drinking fountains. Pure coordinates, no names: 460 points cost
@@ -151,7 +159,7 @@ pl=[[p["n"], CATS.index(p["c"]),
 print("places packed:", len(pl), "cats", CATS)
 head=dict(sections=hdr, nbld=gj.get("nbld"), nknown=gj.get("nknown"),
           ncad=gj.get("ncadastre"), nnaso=len(nax),
-          nnode=NNODE, nedge=NEDGE, pl=pl, cats=CATS, top=PP["top"], qs=QS, ox=OX, oy=OY, nseg=len(segs), nframe=T.shape[1],
+          nnode=NNODE, nedge=NEDGE, ndate=NDATE, slots=SLOTS, city=CITY, pl=pl, cats=CATS, top=PP["top"], qs=QS, ox=OX, oy=OY, nseg=len(segs), nframe=T.shape[1],
           kinds=KINDS, names=names, frames=meta,
           bbox=dict(x0=float(bx0),y0=float(by0),x1=float(bx1),y1=float(by1)),
           proj=dict(lat0=41.8965, lon0=12.4800, mperlat=111132.0,
@@ -159,6 +167,13 @@ head=dict(sections=hdr, nbld=gj.get("nbld"), nknown=gj.get("nknown"),
 hb=json.dumps(head,ensure_ascii=False,separators=(",",":")).encode()
 blob=struct.pack("<I",len(hb))+hb+b"".join(parts)
 gz=gzip.compress(blob,9)
-b64=base64.b64encode(gz).decode()
+# One line per stream: the blob first, then one per date in frame order.
+# Separately gzipped, so date d inflates without touching any other.
+lines=[base64.b64encode(gz).decode()]
+for d in range(NDATE):
+    c=np.ascontiguousarray(T[:, d*SLOTS:(d+1)*SLOTS]).tobytes()
+    lines.append(base64.b64encode(gzip.compress(c,9)).decode())
+b64="\n".join(lines)
 open(build("data.b64"),"w").write(b64)
-print("raw",len(blob)/1e6,"MB  gzip",len(gz)/1e6,"MB  b64",len(b64)/1e6,"MB")
+print("raw",len(blob)/1e6,"MB  gzip",len(gz)/1e6,"MB  +",NDATE,"dates",
+      round(sum(len(l) for l in lines[1:])*3/4/1e6,2),"MB gzip  b64",len(b64)/1e6,"MB")

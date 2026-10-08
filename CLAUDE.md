@@ -4,7 +4,7 @@ A street-by-street shade map of central Rome, plus shade-aware walking routes.
 Built because walking Rome in 38 °C is miserable and the shady lane is usually
 only a block away from the one you'd have taken.
 
-Output is a **single self-contained HTML file** (~5.3 MB) with all data embedded:
+Output is a **single self-contained HTML file** (~6.4 MB) with all data embedded:
 no server, no network, works offline.
 
 ## Commands
@@ -100,8 +100,9 @@ Anything you test must be `dist/ombra-roma.html`.
 views — iOS Quick Look among them — expose the Streams API but never resolve it,
 so the page hangs on the loading screen with no error to catch. `ozInflate` in
 `web/template.html` is a ~90-line DEFLATE decoder written inline for that reason;
-it is verified byte-identical to zlib and takes ~0.4 s on desktop, ~1.5 s on a
-phone. There is also a `window.addEventListener('error')` handler that writes
+it is verified byte-identical to zlib. Native `DecompressionStream` would not
+have been faster anyway: on this payload in Chromium it took 529 ms where
+`ozInflate` took 320 ms. There is also a `window.addEventListener('error')` handler that writes
 failures onto the loading screen, so nothing fails silently again.
 
 **Geolocation cannot work in the hosted artifact.** Artifacts render in a
@@ -253,7 +254,7 @@ Two builds feed all of this:
 
 - **`dist/ombra-roma.html`** — the standalone. A complete document, works offline,
   from disk, anywhere. This is what you send people and what the tests load.
-  Not committed: it is 5.3 MB of base64 over gzip, which barely compresses and
+  Not committed: it is 6.4 MB of base64 over gzip, which barely compresses and
   cannot be delta'd, so every rebuild added that much to the history for good.
   CI uploads it to a release asset on a fixed `build` tag instead, replaced in
   place on every push to `main`, so the download is always current, the URL never
@@ -293,16 +294,33 @@ when publishing.
 
 ## Payload format
 
-One gzip blob, base64 in a `<script type="text/plain">`. Layout:
-`[uint32 header length][header JSON][binary sections]`. The header names each
-section's offset, length and dtype, and carries the projection, frame metadata,
-street names, place list and shortlist. Coordinates are `uint16`, quantised to
-0.5 m against an origin in the header. Shade is one byte per segment per frame,
-**segment-major** — that ordering alone halves the gzipped size, because a
-segment's shade over consecutive half-hours is smooth.
+Base64 lines in a `<script type="text/plain">`: one gzip blob, then one gzip
+stream of shade per date. The blob is `[uint32 header length][header JSON][binary
+sections]`. The header names each section's offset, length and dtype, and
+carries the projection, frame metadata, street names, place list, shortlist and
+`city`, the city-wide mean shade of every frame. Coordinates are `uint16`,
+quantised to 0.5 m against an origin in the header. Shade is one byte per
+segment per frame, **segment-major** within each date — that ordering alone
+halves the gzipped size, because a segment's shade over consecutive half-hours
+is smooth.
+
+**Shade is split by date because unpacking it was most of a phone's boot.** It
+is 29 MB of the 31 MB unpacked, and the page only ever reads one date of it, so
+each of the 24 dates (`head.ndate`, `head.slots` = 32 frames each) is its own
+gzip stream and boot inflates only the one it opens on. `D.shade` keeps its full
+`[segment][frame]` shape and `dateBase()` — which every shade read goes through —
+fills a date the first time it is asked for. Measured with `measure_boot.mjs`:
+boot 2.04 s → 0.91 s with the CPU slowed 4×, 0.49 s → 0.28 s on desktop. A date
+then costs 155 ms / 56 ms the first time you switch to it. The price is size:
+24 separate streams lose some of the segment-major compression, 2.76 → 3.56 MB
+of gzip, and the file grew 5.4 → 6.4 MB. Twelve monthly streams would have cost
++20 % instead of +29 %, but they unpack twice as much at boot. Anything that
+reads `D.shade` without going through `dateBase()` must call
+`window.ombra.loadDate(d)` first — the smoke test does, and checks every date
+lands in its own frames against `head.city`.
 
 `window.ombra` exposes state and helpers (`st`, `head`, `data`, `setEnd`,
-`recompute`, `nearestNode`, `labelForNode`, `screenXY`) for debugging and for the
+`recompute`, `nearestNode`, `labelForNode`, `screenXY`, `loadDate`, `BOOT`) for debugging and for the
 tests.
 
 Nasoni ride along in two `u2` sections, `nax`/`nay`, quantised like everything
@@ -404,18 +422,17 @@ patchy — some leafy streets score drier than they feel.
   not where the measurement is.
 - **Wider coverage.** The bbox stops at the historic core; Quartiere Coppedè,
   Testaccio, Ostiense and EUR are just outside. What it costs is measured, not
-  the streets themselves (the cache ends at the bbox): the payload is 87 %
-  per-segment data (shade alone 70 %), about **124 B of HTML per segment and
-  31 B per building**. The bbox's own 1 km cells run from 800 segments/km²
-  (Villa Pamphili) to 2,700 (centro storico), mean 1,936, so a km² costs
-  **200–320 kB** and, since every boot stage but the draw scales with the
-  payload, **+80–120 ms of phone boot** (`measure_boot.mjs`). A 1 km strip on
-  one side is ~5 km²: +1.0–1.6 MB, ~2.5 s phone boot. Strips on the south,
-  north and east together: ~9.7 MB, ~3.6 s. EUR, 4–5 km south, would roughly
-  double the file on its own; it wants its own bbox, not a stretched one.
-  Terrain already reaches 2 km past the bbox. Before the `closePath` fix the
-  same strips would have taken the quadratic first draw, at ~26 k outlines,
-  from 1.2 s to ~3.5 s on desktop.
+  the streets themselves (the cache ends at the bbox): almost all of the file is
+  per-segment data, about **152 B of HTML per segment and 31 B per building**
+  since shade was split by date. The bbox's own 1 km cells run from 800
+  segments/km² (Villa Pamphili) to 2,700 (centro storico), mean 1,936, so a km²
+  costs **245–380 kB** of file but only **+35–55 ms of phone boot**, because
+  boot unpacks one date of shade, not 24 (`measure_boot.mjs`). A 1 km strip on
+  one side is ~5 km²: +1.2–1.9 MB, ~1.1 s phone boot. Strips on the south,
+  north and east together: ~11.6 MB, ~1.7 s. File size, not boot, is now the
+  limit — the artifact cap is 16 MB. EUR, 4–5 km south, would roughly double
+  the file on its own; it wants its own bbox, not a stretched one. Terrain
+  already reaches 2 km past the bbox.
 - **Multi-stop day planning** — order a day's sights to minimise sun exposure.
 - **Another city.** Nothing in the pipeline is Rome-specific except the bbox in
   `fetch_osm.py`/`terrain.py`, the landmark shortlist in `places.py`, and the
