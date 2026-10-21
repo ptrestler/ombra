@@ -379,6 +379,32 @@ tr.row:hover td{background:var(--panel-2)}
 .pin{flex:0 0 auto;width:19px;height:19px;border-radius:50%;background:var(--ink);color:var(--ground);
   font-style:normal;font-size:10.5px;font-weight:700;display:grid;place-items:center}
 .pin.b{background:var(--accent);color:var(--accent-ink)}
+/* Stops between A and B: numbered, in panel and ink like the marks on the map,
+   so the two ends keep their colours and a stop never reads as one of them. */
+.pin.s{background:var(--panel);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.rstp .rmstop{flex:0 0 auto;border:none;background:transparent;color:var(--muted);font-size:17px;
+  line-height:1;padding:2px 4px;margin:-4px -4px -4px 0}
+#rStops{display:contents}
+/* "Add a stop" shares the column beside the fields with the swap button: a
+   row of its own cost every walk 30 px of map, and took the card past half.
+   Both sit at the foot of the column: higher up, the swap button lands inside
+   the close button's 44 px target and a tap on it closes the card. */
+.swap.addb{font-size:19px;font-weight:500;top:auto;bottom:0;transform:none;height:26px}
+.swap.addb[hidden]{display:none}
+.rpts.adding #rSwap{top:auto;bottom:30px;transform:none;height:26px}
+/* A chained walk's timeline: one line per stop, the hour you get there first. */
+.rtl{list-style:none;margin:0;padding:0}
+.rtl li{display:flex;gap:7px;align-items:center;padding:2px 0}
+.rtl .pin{width:17px;height:17px;font-size:9.5px}
+.rtl .t{flex:0 0 auto;font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums;min-width:36px}
+.rtl .w{flex:1;min-width:0}
+.rtl .nm{border:none;background:transparent;padding:0;font:inherit;font-weight:700;color:inherit;
+  text-align:left;text-decoration:underline dotted var(--muted);text-underline-offset:3px}
+.rtl .rmstop{flex:0 0 auto;border:none;background:transparent;color:var(--muted);font-size:16px;
+  line-height:1;padding:2px 4px;margin:-4px -4px -4px 0}
+.rtl .shut{color:var(--sun);font-weight:600}
+.staychip{margin-top:5px;padding:3px 10px;border-radius:99px;border:1px solid var(--line);
+  background:transparent;font:inherit;font-size:12px;font-weight:600;color:var(--ink-2)}
 .swap{position:absolute;right:0;top:50%;transform:translateY(-50%);width:30px;height:30px;
   border-radius:8px;border:1px solid var(--line);background:var(--panel-2);
   font-size:14px;color:var(--ink-2);display:grid;place-items:center}
@@ -557,12 +583,14 @@ tr.row:hover td{background:var(--panel-2)}
                  autocomplete="off" role="combobox" aria-expanded="false" aria-controls="rResults"
                  aria-autocomplete="list">
           <button class="star" data-w="a" aria-pressed="false" aria-label="Save this place" hidden>&#9734;</button></div>
+        <div id="rStops"></div>
         <div class="rpt" id="rTo"><i class="pin b" aria-hidden="true">B</i>
           <input id="rToI" type="search" placeholder="Where are you going?" aria-label="Destination"
                  autocomplete="off" role="combobox" aria-expanded="false" aria-controls="rResults"
                  aria-autocomplete="list">
           <button class="star" data-w="b" aria-pressed="false" aria-label="Save this place" hidden>&#9734;</button></div>
         <button class="swap" id="rSwap" title="Swap" aria-label="Swap start and destination">&#8645;</button>
+        <button class="swap addb" id="rAdd" title="Add a stop" aria-label="Add a stop" hidden>+</button>
       </div>
 
       <div id="rpick">
@@ -923,7 +951,7 @@ const AWAY = (()=>{ try{
 }catch(e){ return " · Rome"; } })();
 const st = {mo:NOW.mo, day:NOW.day, ti:NOW.ti, live:true, today:NOW.today, scale:1, cx:0, cy:0, sel:-1, hi:null,
             routing:false, a:-1, b:-1, k:1.2, route:null, refRoute:null,
-            aL:"", bL:"", pick:null, mapPick:null, via:false};
+            aL:"", bL:"", pick:null, mapPick:null, via:false, stops:[], stay:30};
 const dateIdx = () => st.mo*2 + (st.day===15?1:0);
 /* Every read of the shade goes through here for its date, so this is where a
    date that has not been unpacked yet gets unpacked. */
@@ -1326,8 +1354,10 @@ function drawOver(){
       const wid=Math.max(6, Math.min(16, st.scale*8));
       const path=(colour,width,which)=>{
         ctx.strokeStyle=colour; ctx.lineWidth=width; ctx.lineCap="round"; ctx.lineJoin="round";
-        for(const e of st.route.edges){
-          if(which!==undefined && bucket(D.shade[D.eSeg[e]*H.nframe+fi])!==which) continue;
+        const ef = st.route.efi;          // a chained walk: each leg at its own hour
+        for(let j=0;j<st.route.edges.length;j++){
+          const e = st.route.edges[j], f = ef ? ef[j] : fi;
+          if(which!==undefined && bucket(D.shade[D.eSeg[e]*H.nframe+f])!==which) continue;
           const off=SEGOFF[D.eSeg[e]];
           ctx.beginPath();
           ctx.moveTo(sx(D.sX[off+D.eI0[e]]), sy(D.sY[off+D.eI0[e]]));
@@ -1342,7 +1372,18 @@ function drawOver(){
       path(C.ink, wid+9); path(C.ground, wid+5);
       for(let b=0;b<NB;b++) path(RAMP[b], wid, b);
     }
-    for(const [n,lab,fill,ink] of [[st.a,"A",C.ink,C.ground],[st.b,"B",C.accent,C.ground]]){
+  }
+  drawNasoni(ctx);
+  drawLabels(ctx);
+  // over the labels: a church's own name is usually right on top of it, and
+  // the mark is the thing to tap
+  drawChurches(ctx);
+  // and the ends over everything: a stop is usually a landmark, so its own
+  // name sat on its number
+  if(st.routing){
+    const pins = [[st.a,"A",C.ink,C.ground],[st.b,"B",C.accent,C.ground]];
+    st.stops.forEach((s,i)=>{ if(s.n>=0) pins.push([s.n, String(i+1), C.panel, C.ink]); });
+    for(const [n,lab,fill,ink] of pins){
       if(n<0) continue;
       const x=sx(NODEX[n]), y=sy(NODEY[n]);
       ctx.beginPath(); ctx.arc(x,y,11,0,7);
@@ -1352,11 +1393,6 @@ function drawOver(){
       ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(lab,x,y+0.5);
     }
   }
-  drawNasoni(ctx);
-  drawLabels(ctx);
-  // over the labels: a church's own name is usually right on top of it, and
-  // the mark is the thing to tap
-  drawChurches(ctx);
   drawMe(ctx);
   if(st.hi && st.hi.length){
     const wIn = Math.max(4.5, Math.min(14, st.scale*7));
@@ -1957,8 +1993,37 @@ function routeStats(edges, fi){
   }
   return {len:L, shade: L>0 ? sh/L*100 : 0};
 }
+/* ---------- stops along the way ---------- */
+/* Your own order, not an optimised one: measure_days.mjs found that choosing
+   the order for shade saves a median 0 % once each leg is routed for shade,
+   because the shadiest order is the shortest on ~70 % of days. What helps is
+   routing each leg for the hour you will actually walk it - leave at the clock
+   time, walk at the 75 m/min the card quotes, stay st.stay minutes at each
+   stop - and saying when you will get where. */
+const PACE = 75, STOPMAX = 6;
+const stopNodes = () => st.stops.filter(s => s.n >= 0).map(s => s.n);
+function recomputeChain(via){
+  const pts = [st.a, ...via, st.b];
+  let t = 360 + st.ti*30, len = 0, sh = 0;
+  const edges = [], efi = [], legs = [];
+  for(let i=0;i<pts.length-1;i++){
+    const slot = Math.max(0, Math.min(31, Math.round((t - 360)/30)));
+    const fi = frameAt(slot), e = route(pts[i], pts[i+1], st.k, fi);
+    if(!e){ st.route = null; st.refRoute = null; return; }
+    const r = routeStats(e, fi);
+    legs.push({depart:t, arrive:t + r.len/PACE, len:r.len, shade:r.shade, to:pts[i+1]});
+    for(const x of e){ edges.push(x); efi.push(fi); }
+    len += r.len; sh += r.len*r.shade/100;
+    t += r.len/PACE + (i < pts.length - 2 ? st.stay : 0);
+  }
+  st.route = {edges, efi, len, shade: len > 0 ? sh/len*100 : 0, legs, end:t,
+              naso:nasoniOn(edges), via:-1, chain:true};
+  st.refRoute = null;
+}
 function recompute(){
   if(st.a<0 || st.b<0){ st.route=null; st.refRoute=null; return; }
+  const via = stopNodes();
+  if(via.length){ st.via = false; recomputeChain(via); return; }
   const fi=frameIndex();
   const e1=route(st.a,st.b,st.k,fi);
   const e0=st.k===0 ? e1 : route(st.a,st.b,0,fi);
@@ -2092,6 +2157,7 @@ function closeRoute(){
   $("#btnRoute").setAttribute("aria-pressed","false");
   $("#rcard").classList.remove("open"); setPicking(false);
   st.a=-1; st.b=-1; st.aL=""; st.bL=""; st.pick=null; st.mapPick=null; st.via=false;
+  st.stops=[]; renderStops();
   // and the text in the fields: reopening searched for whatever was left there,
   // so the shortlist came back as "Nothing matched"
   fieldOf("a").value = ""; fieldOf("b").value = "";
@@ -2105,8 +2171,17 @@ function renderRoute(){
   // while a route is up, and that would eat a half-finished name
   setField("#rFromI", st.aL);
   setField("#rToI", st.bL);
+  st.stops.forEach((s,i)=>{ const el=fieldOf("s"+i); if(el && document.activeElement!==el) el.value=s.L||""; });
   syncStars();
+  $("#rAdd").hidden = st.a<0 || st.b<0 || st.stops.length >= STOPMAX || st.stops.some(s=>s.n<0);
+  $(".rpts").classList.toggle("adding", !$("#rAdd").hidden);
   if(st.pick) return;
+  // left without choosing: a blank stop goes, and a stop being changed keeps its place
+  if($("#rStops").children.length){
+    st.stops = st.stops.filter(s=>s.n>=0); renderStops();
+    $("#rAdd").hidden = st.stops.length >= STOPMAX;
+    $(".rpts").classList.toggle("adding", !$("#rAdd").hidden);
+  }
   setPicking(false);
   $("#rFromI").setAttribute("aria-expanded","false");
   $("#rToI").setAttribute("aria-expanded","false");
@@ -2122,6 +2197,7 @@ function renderRoute(){
   if(!r){ $("#rTitle").textContent="No walkable route";
     $("#rSub").textContent="Those two points aren't joined in the street network.";
     $("#rPct").textContent="\u2014"; $("#rCompare").innerHTML=""; return; }
+  if(r.chain){ renderChain(r); return; }
   $("#rTitle").textContent = fmtLen(r.len)+" \u00b7 "+fmtMin(r.len);
   $("#rSub").textContent = "at "+fmtTime(st.ti)+", "+dayLabel()+" "+MONTH[shownMo()]+
     " \u00b7 "+fmtLen(r.len*(1-r.shade/100))+" in the sun";
@@ -2177,12 +2253,90 @@ function renderRoute(){
   drawStrip("#rstrip", r.edges.map(e=>[D.eSeg[e], D.eLen[e]/10]), 48);
   $("#rstripNow").textContent = fmtTime(st.ti)+" \u00b7 "+Math.round(r.shade)+"% shade";
 }
+/* The card for a walk with stops: the hour you reach each one, each leg's own
+   shade, and a church stop that will be shut when you get there said plainly.
+   The strip still plots the whole walk through the day, so tapping it moves
+   the departure. */
+function churchNear(n){
+  if(!H.ch) return -1;
+  let best=-1, bd=60*60;
+  for(let i=0;i<H.ch.length;i++){
+    const dx=chX(i)-NODEX[n], dy=chY(i)-NODEY[n], d=dx*dx+dy*dy;
+    if(d<bd){ bd=d; best=i; }
+  }
+  return best;
+}
+function renderChain(r){
+  $("#rTitle").textContent = fmtLen(r.len)+" \u00b7 "+fmtMin(r.len)+" walking";
+  $("#rSub").textContent = fmtTime(st.ti)+"\u2013"+hm(Math.round(r.end))+", "+dayLabel()+" "+MONTH[shownMo()]+
+    " \u00b7 "+fmtLen(r.len*(1-r.shade/100))+" in the sun";
+  $("#rPct").textContent = Math.round(r.shade);
+  $("#rBig").style.color = rampInk(r.shade);
+  const ix = st.stops.map((s,i)=>i).filter(i=>st.stops[i].n>=0);
+  let html = '<ol class="rtl">';
+  r.legs.forEach((g,i)=>{
+    const last = i === r.legs.length-1;
+    let note = "";
+    const c = last ? -1 : churchNear(g.to);
+    if(c >= 0){
+      const s0 = churchStatus(c, Math.round(g.arrive));
+      note = s0.open ? ' \u00b7 open till '+hm(s0.until)
+           : ' \u00b7 <span class="shut">shut when you arrive'+(s0.from!==null ? ', opens '+hm(s0.from) : '')+'</span>';
+    }
+    const name = last ? '<b>'+esc(st.bL||"")+'</b>'
+      : '<button class="nm" data-i="'+ix[i]+'" aria-label="Change stop '+(ix[i]+1)+'">'+esc(st.stops[ix[i]].L||"")+'</button>';
+    html += '<li>'+(last ? '<i class="pin b" aria-hidden="true">B</i>' : '<i class="pin s" aria-hidden="true">'+(ix[i]+1)+'</i>')+
+            '<span class="t">'+hm(Math.round(g.arrive))+'</span><span class="w">'+name+
+            ' \u00b7 '+fmtLen(g.len)+', <span style="color:'+rampInk(g.shade)+';font-weight:600">'+
+            Math.round(g.shade)+'%</span> shade'+note+'</span>'+
+            (last ? '' : '<button class="rmstop" data-i="'+ix[i]+'" aria-label="Remove stop '+(ix[i]+1)+'">&#215;</button>')+'</li>';
+  });
+  $("#rCompare").innerHTML = html+'</ol><button class="staychip" id="rStay">Stay '+st.stay+' min at each stop</button>';
+  $("#rNaso").innerHTML = ""; $("#rNaso").hidden = true; $("#rNaso").classList.remove("via");
+  drawStrip("#rstrip", r.edges.map(e=>[D.eSeg[e], D.eLen[e]/10]), 48);
+  $("#rstripNow").textContent = "leave "+fmtTime(st.ti)+" \u00b7 "+Math.round(r.shade)+"% shade";
+}
+/* A stop gets a field only while it is being chosen; once chosen it lives in
+   the timeline, which already names it. Two stops as fields as well as lines
+   took the card to three quarters of a phone. */
+function renderStops(){
+  const box = $("#rStops");
+  box.innerHTML = st.stops.map((s,i)=> s.n>=0 && st.pick!=="s"+i ? "" :
+    '<div class="rpt rstp"><i class="pin s" aria-hidden="true">'+(i+1)+'</i>'+
+    '<input data-w="s'+i+'" type="search" placeholder="Choose stop '+(i+1)+'" aria-label="Stop '+(i+1)+'"'+
+    ' autocomplete="off" role="combobox" aria-expanded="false" aria-controls="rResults" aria-autocomplete="list"'+
+    ' value="'+esc(s.L||"")+'">'+
+    '<button class="rmstop" data-i="'+i+'" aria-label="Remove stop '+(i+1)+'">&#215;</button></div>').join("");
+  box.querySelectorAll("input").forEach(el => bindField(el, el.dataset.w));
+  box.querySelectorAll(".rpt").forEach(row=>row.addEventListener("click", e=>{
+    if(e.target.tagName !== "INPUT" && !e.target.closest(".rmstop")) row.querySelector("input").focus();
+  }));
+  resize();
+}
+function removeStop(i){
+  st.stops.splice(i, 1); st.pick=null;
+  renderStops(); recompute(); renderRoute(); frameEnds(); schedule(true);
+}
+function editStop(i){
+  st.pick="s"+i; renderStops(); openPick("s"+i);
+  if(!matchMedia("(hover: none)").matches) setTimeout(()=>{ const el=fieldOf("s"+i); if(el) el.focus(); }, 30);
+}
+function addStop(){
+  if(st.stops.length >= STOPMAX) return;
+  st.stops.push({n:-1, L:""}); renderStops();
+  const w = "s"+(st.stops.length-1);
+  openPick(w);
+  if(!matchMedia("(hover: none)").matches) setTimeout(()=>{ const el=fieldOf(w); if(el) el.focus(); }, 30);
+}
 function setEnd(which, node, label){
   if(node<0) return;
   const wasMap = st.mapPick;
-  if(which==="a"){ st.a=node; st.aL=label; } else { st.b=node; st.bL=label; }
+  if(which==="a"){ st.a=node; st.aL=label; }
+  else if(which==="b"){ st.b=node; st.bL=label; }
+  else { const i=+which.slice(1); if(!st.stops[i]) return; st.stops[i]={n:node, L:label}; }
   fieldOf(which).value = label;
   st.pick=null; st.mapPick=null;
+  if(which[0]==="s") renderStops();
   recompute(); renderRoute();
   // Answering "where are you now?" always means the next question is "where are
   // you going?". Ask it instead of making them tap the other end. Only when that
@@ -2204,7 +2358,7 @@ function setEnd(which, node, label){
 function startMapPick(){
   st.mapPick=st.pick; $("#pickMap").setAttribute("aria-pressed","true");
   $("#rResults").innerHTML='<div class="resnote">Tap anywhere on the map to drop '+
-    (st.pick==="a"?"the start":"the destination")+'. The nearest street is used.</div>';
+    (st.pick==="a"?"the start":st.pick==="b"?"the destination":"this stop")+'. The nearest street is used.</div>';
 }
 function setPoint(x,y){                      // legacy/manual map tap
   const n=nearestNode(x,y); if(n<0) return;
@@ -2229,7 +2383,7 @@ function frameEnds(){
     return;
   }
   // a stop for water can sit off the line between them, and it has to be in shot
-  const pts=[st.a, st.b];
+  const pts=[st.a, st.b, ...stopNodes()];
   if(st.route && st.route.via>=0) pts.push(nasoNodes()[st.route.via]);
   const xs=pts.map(n=>NODEX[n]), ys=pts.map(n=>NODEY[n]);
   const x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys);
@@ -2248,7 +2402,8 @@ function setPicking(on){
   $("#rcard").classList.toggle("picking", on);
   resize();
 }
-const fieldOf = which => $(which === "a" ? "#rFromI" : "#rToI");
+const fieldOf = which => which === "a" ? $("#rFromI") : which === "b" ? $("#rToI")
+  : document.querySelector('#rStops input[data-w="'+which+'"]');
 function setField(sel, label){
   const el = $(sel);
   if(document.activeElement === el) return;      // they are mid-word
@@ -2257,8 +2412,8 @@ function setField(sel, label){
 function openPick(which){
   st.pick=which; st.mapPick=null;
   setPicking(true);
-  $("#rFromI").setAttribute("aria-expanded", which==="a");
-  $("#rToI").setAttribute("aria-expanded", which==="b");
+  document.querySelectorAll("#rcard .rpt input").forEach(el=>el.setAttribute("aria-expanded","false"));
+  const f=fieldOf(which); if(f) f.setAttribute("aria-expanded","true");
   $("#pickMap").setAttribute("aria-pressed","false");
   applyGeoStatus(); renderResults(fieldOf(which).value.trim()); renderRoute();
 }
@@ -2767,8 +2922,7 @@ function markRes(){
     if(i===resAt && b.scrollIntoView) b.scrollIntoView({block:"nearest"});
   });
 }
-for(const which of ["a","b"]){
-  const el = fieldOf(which);
+function bindField(el, which){
   el.addEventListener("focus", ()=>{ resAt=-1; openPick(which); el.select(); });
   el.addEventListener("input", ()=>{ resAt=-1; renderResults(el.value.trim()); });
   el.addEventListener("keydown", e=>{
@@ -2789,12 +2943,28 @@ for(const which of ["a","b"]){
     }
   });
 }
+bindField(fieldOf("a"), "a"); bindField(fieldOf("b"), "b");
+$("#rAdd").addEventListener("click", addStop);
+// rebuilt with the card, so listen on the card
+$("#rCompare").addEventListener("click", e=>{
+  const rm = e.target.closest(".rmstop"), nm = e.target.closest(".nm");
+  if(rm) removeStop(+rm.dataset.i);
+  else if(nm) editStop(+nm.dataset.i);
+  else if(e.target.closest("#rStay")){
+    st.stay = st.stay >= 60 ? 15 : st.stay + 15;
+    recompute(); renderRoute(); schedule(false);
+  }
+});
+$("#rStops").addEventListener("click", e=>{
+  const rm = e.target.closest(".rmstop"); if(rm){ e.stopPropagation(); removeStop(+rm.dataset.i); }
+});
 // the row is wider than the field inside it; a tap on the pin still lands in it
-document.querySelectorAll(".rpt").forEach(row=>row.addEventListener("click", e=>{
+document.querySelectorAll("#rFrom, #rTo").forEach(row=>row.addEventListener("click", e=>{
   if(e.target.tagName !== "INPUT") row.querySelector("input").focus();
 }));
 $("#rSwap").addEventListener("click", ()=>{
   const a=st.a,al=st.aL; st.a=st.b; st.aL=st.bL; st.b=a; st.bL=al;
+  st.stops.reverse(); renderStops();     // the walk back calls at them the other way round
   st.pick=null; recompute(); renderRoute(); schedule(false); });
 $("#pickGeo").addEventListener("click", useGeo);
 $("#pickMap").addEventListener("click", startMapPick);

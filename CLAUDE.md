@@ -326,6 +326,21 @@ which took Shadiest from 188 ms a recompute to 74 ms. The button only appears
 where the dry-stretch line does, and the line must stay one line on a phone:
 two pushes the card past half the map.
 
+**Stops are chained in the order you give them, and nothing reorders them.**
+`measure_days.mjs` is why: the shadiest order is the shortest one on ~70 % of
+days. The **+** under the swap button (up to six stops) turns a walk into
+legs — it sits in that column because a row of its own cost every walk 30 px
+and took the card past half the map; `recomputeChain` routes
+each one at the half-hour it starts, walking 75 m/min and staying `st.stay`
+minutes at each stop (the chip cycles 15–60), so the route keeps a frame per
+edge (`st.route.efi`) and `drawOver` colours each leg at its own hour. A stop
+has a field only while it is being chosen; after that it is a line in the
+timeline (tap the name to change it, × to drop it), because two stops as
+fields *and* lines took the card to 73 % of a phone and left the map 27 %. A
+stop within 60 m of a church with readable hours says whether it will be open
+when you get there. Pins are drawn over the place labels — a stop is usually
+a landmark, and its own name used to sit on its number.
+
 ## Publishing
 
 Three places the page ends up, and mixing them up wastes an afternoon:
@@ -529,9 +544,8 @@ patchy — some leafy streets score drier than they feel.
   the shortest routes; choosing the *order* for shade on top of that saves a
   median **0 %** — the shadiest order is the shortest one on ~70 % of days —
   and more than 25 % on only 1–6 % of them. An optimiser would be a lot of UI
-  for that. What could still earn its place is convenience: stops chained in
-  the order you give them, each leg routed for its own hour, with arrival
-  times.
+  for that. The convenience half shipped instead — see "Stops are chained in
+  the order you give them" above.
 - **Another city.** Nothing in the pipeline is Rome-specific except the bbox in
   `fetch_osm.py`/`terrain.py`, the landmark shortlist in `places.py`, and the
   timezone/DST rule in `shade.py`.
