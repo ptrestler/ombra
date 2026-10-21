@@ -486,6 +486,84 @@ async function run(engine, label, breakStreams, which) {
     await p.evaluate(k => { const o = window.ombra; o.st.a = k.a; o.st.b = k.b;
                             o.recompute(); o.renderRoute(); }, keep);
 
+    // Stops, chained in the order given: each leg routed at the hour it starts,
+    // with the time you reach each one. A chosen stop leaves its field and lives
+    // in the timeline, or two of them would take the card to three quarters of
+    // a phone.
+    const chain = () => p.evaluate(() => {
+      const o = window.ombra, r = o.st.route;
+      return { stops: o.st.stops.length, fields: document.querySelectorAll('#rStops input').length,
+               rows: document.querySelectorAll('#rCompare .rtl li').length,
+               legs: r && r.legs ? r.legs.map(g => ({ d: g.depart, a: g.arrive })) : null,
+               stay: o.st.stay, text: document.querySelector('#rCompare').textContent,
+               band: (() => {
+                 const s = document.querySelector('#stage').getBoundingClientRect();
+                 const c = document.querySelector('#rcard').getBoundingClientRect();
+                 return Math.round((c.top - s.top) / s.height * 100); })() };
+    });
+    check('a finished walk offers a stop', await p.isVisible('#rAdd'));
+    await p.click('#rAdd'); await p.waitForTimeout(250);
+    check('adding one asks where, in a field of its own',
+          await p.evaluate(() => window.ombra.st.pick) === 's0' && (await chain()).fields === 1);
+    await p.locator('.res', { hasText: 'Fontana di Trevi' }).first().click();
+    await p.waitForTimeout(500);
+    let c1 = await chain();
+    check('the walk then calls at it, leg by leg',
+          c1.stops === 1 && c1.legs && c1.legs.length === 2 && c1.rows === 2 && c1.fields === 0,
+          `${c1.legs && c1.legs.length} legs, ${c1.fields} fields left`);
+    check('each leg leaves when the stay at the last one ends',
+          c1.legs && c1.legs[0].a > c1.legs[0].d && Math.abs(c1.legs[1].d - (c1.legs[0].a + c1.stay)) < 0.01,
+          c1.legs && c1.legs.map(g => `${Math.round(g.d)}-${Math.round(g.a)}`).join(', '));
+    await p.click('#rAdd'); await p.waitForTimeout(250);
+    await p.locator('.res', { hasText: 'Piazza Navona' }).first().click();
+    await p.waitForTimeout(500);
+    const c2 = await chain();
+    check('two stops still leave the map a good part of the screen', c2.legs.length === 3 && c2.band >= 40,
+          `${c2.band}% map`);
+    await p.click('#rStay'); await p.waitForTimeout(300);
+    const c3 = await chain();
+    check('a longer stay moves the later legs, and only them',
+          c3.stay === c2.stay + 15 && c3.legs[0].d === c2.legs[0].d &&
+          Math.abs(c3.legs[2].d - c2.legs[2].d - 30) < 0.01, `stay ${c2.stay} -> ${c3.stay} min`);
+    // tapping a stop's name asks again; leaving without an answer keeps it
+    await p.locator('#rCompare .nm').first().click(); await p.waitForTimeout(250);
+    check('a stop can be changed from the timeline',
+          await p.evaluate(() => window.ombra.st.pick) === 's0' && (await chain()).fields === 1);
+    await p.click('#rTo'); await p.waitForTimeout(200);
+    await p.keyboard.press('Escape'); await p.waitForTimeout(250);
+    const c4 = await chain();
+    check('and changing your mind keeps it', c4.stops === 2 && c4.fields === 0, `${c4.stops} stops`);
+    // swapping the ends walks the stops the other way round
+    const order = () => p.evaluate(() => window.ombra.st.stops.map(s => s.L).join(' > '));
+    const before = await order();
+    await p.click('#rSwap'); await p.waitForTimeout(300);
+    check('swapping the ends reverses the stops', await order() === before.split(' > ').reverse().join(' > '),
+          await order());
+    await p.click('#rSwap'); await p.waitForTimeout(300);
+    // a church as a stop says when it will be shut: the Pantheon closes 19:15
+    // Monday to Saturday, so leaving at 19:30 on a Tuesday finds it shut
+    const shut = await p.evaluate(() => {
+      const o = window.ombra, st = o.st, H = o.head;
+      const i = H.ch.findIndex(c => /^Pantheon$/.test(c[0]) || /Santa Maria ad Martyres/.test(c[0]));
+      const keep = { today: st.today, live: st.live, ti: st.ti, stops: st.stops };
+      const y = new Date().getFullYear(); let d = 1;
+      while (new Date(y, 9, d).getDay() !== 2) d++;
+      st.live = false; st.today = { mo: 9, d }; st.ti = 27;
+      const n = o.nearestNode(H.ox + H.ch[i][1] * H.qs, H.oy + H.ch[i][2] * H.qs);
+      st.stops = [{ n, L: 'Pantheon' }]; o.recompute(); o.renderRoute();
+      const t = document.querySelector('#rCompare').textContent;
+      Object.assign(st, keep); o.recompute(); o.renderRoute();
+      return t;
+    });
+    check('a church stop says when it will be shut', /shut when you arrive/.test(shut),
+          shut.replace(/\s+/g, ' ').slice(0, 70));
+    for (let k = 0; k < 2; k++) {
+      await p.locator('#rCompare .rmstop').first().click(); await p.waitForTimeout(300);
+    }
+    check('and removing the stops gives the direct walk back',
+          await p.evaluate(() => !window.ombra.st.route.chain && !window.ombra.st.stops.length) &&
+          /Shortest way|shortest way/.test(await p.textContent('#rCompare')));
+
     // the route card carries its own scrubber, and it is about this route
     check('the console stays out of the way while the route is up',
           await p.evaluate(() => getComputedStyle(document.querySelector('#console')).display === 'none'));
