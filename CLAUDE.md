@@ -47,7 +47,7 @@ position), `hours.py` (OSM `opening_hours` → a schedule, or a refusal), `heigh
 `buildings.py` (the outlines, shared by the build and the report),
 `streets.py` (segmentation).
 
-Six scripts that measure rather than build, none on the `make` path:
+Seven scripts that measure rather than build, none on the `make` path:
 `measure_heights.py` (`make heights`) scores every height source against the OSM
 tags and prints the tables `heights.py` quotes; `compare_frames.py` diffs two
 `build/frames.npy` so a model change can be seen rather than assumed; and
@@ -59,7 +59,9 @@ each boot stage at desktop speed and with the CPU slowed 4×, from the
 `window.ombra.BOOT` laps the page records; and `measure_dates.py` (needs a
 build, ~4 min) computes the real shade for the 8th and 23rd of every month
 with `shade.frame()` and scores the ways the page can stand in for a day it
-does not sample.
+does not sample; and `measure_days.mjs` (needs a build, ~1 min) asks whether
+ordering a day's stops for shade beats walking a sensible order on shady
+streets.
 
 ## How the shade model works
 
@@ -520,7 +522,16 @@ patchy — some leafy streets score drier than they feel.
   limit — the artifact cap is 16 MB. EUR, 4–5 km south, would roughly double
   the file on its own; it wants its own bbox, not a stretched one. Terrain
   already reaches 2 km past the bbox.
-- **Multi-stop day planning** — order a day's sights to minimise sun exposure.
+- ~~**Multi-stop day planning**~~ — measured, and the ordering half does not
+  pay. `measure_days.mjs`, 200 random days of 5–6 landmark stops from 09:00
+  and from 13:00 on 15 July, each leg routed at its own hour: routing every
+  leg for shade (what the app already does) cuts sun by **33–36 %** against
+  the shortest routes; choosing the *order* for shade on top of that saves a
+  median **0 %** — the shadiest order is the shortest one on ~70 % of days —
+  and more than 25 % on only 1–6 % of them. An optimiser would be a lot of UI
+  for that. What could still earn its place is convenience: stops chained in
+  the order you give them, each leg routed for its own hour, with arrival
+  times.
 - **Another city.** Nothing in the pipeline is Rome-specific except the bbox in
   `fetch_osm.py`/`terrain.py`, the landmark shortlist in `places.py`, and the
   timezone/DST rule in `shade.py`.
